@@ -1,0 +1,13 @@
+.env
+.vercel
+.DS_Store
+*.backup*
+*.original_staged
+fix_*.py
+patch_*.py
+update_*.py
+make_*.py
+restore_*.py
+logs/
+node_modules/
+__pycache__/

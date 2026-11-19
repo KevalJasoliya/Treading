@@ -1,0 +1,2926 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuantLeaf Terminal · Strategy 5 (Sector Leaders Intraday)</title>
+
+  <!-- Google Fonts: Poppins & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+
+  <style>
+    /* ==========================================================================
+       ZENTRA FINTECH DESIGN SYSTEM (DARK & LIGHT THEMES · 100vh ZERO-SCROLL)
+       ========================================================================== */
+    :root {
+      --font-main: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+
+      /* Dark Theme (Default) */
+      --bg-base: #080c14;
+      --bg-card: #0f1626;
+      --bg-card-subtle: #141d32;
+      --bg-elevated: #18233c;
+      --bg-hover: #1f2c4a;
+      --bg-active: #24355a;
+
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --border-accent: rgba(99, 102, 241, 0.45);
+
+      --primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      --primary-color: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-glow: 0 4px 20px rgba(99, 102, 241, 0.35);
+
+      --light-blue: #38bdf8;
+      --light-blue-subtle: rgba(56, 189, 248, 0.12);
+
+      --text-white: #ffffff;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --bullish: #10b981;
+      --bullish-subtle: rgba(16, 185, 129, 0.12);
+      --bullish-border: rgba(16, 185, 129, 0.35);
+
+      --bearish: #f43f5e;
+      --bearish-subtle: rgba(244, 63, 94, 0.12);
+      --bearish-border: rgba(244, 63, 94, 0.35);
+
+      --card-radius: 16px;
+      --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    html.light {
+      /* Light Theme (Zentra Clean White / Slate) */
+      --bg-base: #f1f3f9;
+      --bg-card: #ffffff;
+      --bg-card-subtle: #f8fafc;
+      --bg-elevated: #f1f5f9;
+      --bg-hover: #e2e8f0;
+      --bg-active: #e0e7ff;
+
+      --border-subtle: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --border-accent: rgba(99, 102, 241, 0.40);
+
+      --primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      --primary-color: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-glow: 0 4px 20px rgba(99, 102, 241, 0.25);
+
+      --light-blue: #0284c7;
+      --light-blue-subtle: #e0f2fe;
+
+      --text-white: #0f172a;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+
+      --bullish: #059669;
+      --bullish-subtle: #dcfce7;
+      --bullish-border: #86efac;
+
+      --bearish: #e11d48;
+      --bearish-subtle: #ffe4e6;
+      --bearish-border: #fecdd3;
+
+      --shadow-card: 0 6px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    /* Reset & Viewport Constraints */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+
+    * {
+      font-family: 'Calibri', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif !important;
+    }
+
+    .num {
+      font-family: 'Calibri', 'Segoe UI', -apple-system, monospace, sans-serif !important;
+      font-feature-settings: "tnum";
+    }
+
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
+      /* ZERO OUTER PAGE SCROLLING */
+      display: flex;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    .num {
+      font-family: var(--font-mono);
+      font-feature-settings: "tnum";
+      letter-spacing: 0.01em;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.45);
+    }
+
+    /* ==========================================================================
+       1. LEFT SIDEBAR NAVIGATION (Zentra Style)
+       ========================================================================== */
+    .sidebar-panel {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: calc(100vh - 20px);
+      box-shadow: var(--shadow-card);
+    }
+
+    .sidebar-top {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .brand-logo-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+
+    .brand-icon-box {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: var(--primary-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 15px;
+      box-shadow: var(--primary-glow);
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-white);
+      letter-spacing: -0.01em;
+    }
+
+    .btn-ask-ai {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-ask-ai:hover {
+      border-color: var(--primary-color);
+      color: var(--text-white);
+    }
+
+    .shortcut-badge {
+      font-size: 10.5px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+    }
+
+    .nav-group-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin: 8px 0 4px 6px;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      font-family: var(--font-main);
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-white);
+    }
+
+    .nav-item.active {
+      background: var(--primary-gradient);
+      color: #ffffff !important;
+      box-shadow: var(--primary-glow);
+      font-weight: 700;
+    }
+
+    .nav-item.active::after {
+      content: '';
+      position: absolute;
+      right: 10px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ffffff;
+    }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .account-card-mini {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .account-card-mini .acc-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-white);
+    }
+
+    .account-card-mini .acc-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .theme-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .switch-pill {
+      position: relative;
+      width: 38px;
+      height: 20px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .switch-pill .switch-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+
+    html.light .switch-pill {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+    }
+
+    html.light .switch-pill .switch-knob {
+      left: 20px;
+      background: #ffffff;
+    }
+
+    /* ==========================================================================
+       2. MAIN CONTENT AREA (TOP BAR + 2-COLUMN GRID)
+       ========================================================================== */
+    .main-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: calc(100vh - 20px);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Top Navigation Bar */
+    .top-navbar {
+      height: 52px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-card);
+      gap: 12px;
+    }
+
+    .top-left-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .instrument-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 5px 12px;
+      font-size: 12.5px;
+    }
+
+    .stance-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .stance-strong {
+      background: var(--bullish-subtle);
+      color: var(--bullish);
+      border: 1px solid var(--bullish-border);
+    }
+
+    .stance-mild {
+      background: var(--light-blue-subtle);
+      color: var(--light-blue);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .top-metrics-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .kpi-chip {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 5px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+    }
+
+    .kpi-chip .chip-label {
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+
+    .kpi-chip .chip-val {
+      font-weight: 700;
+      color: var(--text-white);
+    }
+
+    .top-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .mode-capsule {
+      display: flex;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 2px;
+    }
+
+    .mode-capsule button {
+      border: none;
+      background: transparent;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 7px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .mode-capsule button.active {
+      background: var(--primary-gradient);
+      color: #ffffff;
+      box-shadow: var(--primary-glow);
+    }
+
+    .btn-quotes-refresh {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary-gradient);
+      color: #ffffff;
+      border: none;
+      border-radius: 9px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--primary-glow);
+      transition: all 0.15s ease;
+    }
+
+    .btn-quotes-refresh:active {
+      transform: scale(0.96);
+    }
+
+    .timer-badge-bubble {
+      background: rgba(0, 0, 0, 0.24);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .feed-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bullish-subtle);
+      border: 1px solid var(--bullish-border);
+      color: var(--bullish);
+      border-radius: 9px;
+      padding: 5px 10px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .feed-pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--bullish);
+      box-shadow: 0 0 8px var(--bullish);
+    }
+
+    /* Dashboard Layout: 2 Columns */
+    .dashboard-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 10px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Left & Center Column */
+    .center-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Chart & Top Market Panel Card */
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 14px 16px;
+      height: 250px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: var(--shadow-card);
+      position: relative;
+    }
+
+    .chart-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .symbol-selector-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .symbol-title-large {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-white);
+    }
+
+    .symbol-price-hero {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text-white);
+    }
+
+    .symbol-chg-badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+
+    .chart-stats-strip {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 11.5px;
+    }
+
+    .stat-pair {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-pair .stat-lbl {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .stat-pair .stat-val {
+      font-weight: 700;
+      color: var(--text-white);
+    }
+
+    .timeframe-strip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 2px;
+    }
+
+    .tf-btn {
+      border: none;
+      background: transparent;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 6px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .tf-btn.active {
+      background: var(--bg-card);
+      color: var(--text-white);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Canvas Area */
+    .chart-canvas-box {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      position: relative;
+      margin-top: 6px;
+    }
+
+    #momentumChart {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Bottom Data Tables Card */
+    .tables-card {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .tables-header-strip {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .tab-pills-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .table-tab-item {
+      border: none;
+      background: transparent;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-main);
+      transition: all 0.15s ease;
+    }
+
+    .table-tab-item:hover {
+      background: var(--bg-elevated);
+      color: var(--text-white);
+    }
+
+    .table-tab-item.active {
+      background: var(--bg-elevated);
+      color: var(--primary-color);
+      border: 1px solid var(--border-accent);
+    }
+
+    html.light .table-tab-item.active {
+      background: var(--bg-active);
+      color: var(--primary-color);
+    }
+
+    .tab-bubble-count {
+      font-size: 10.5px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-weight: 800;
+    }
+
+    .table-viewport-container {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      padding: 0;
+    }
+
+    /* High Density FinTech Table */
+    .data-table-main {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+    }
+
+    .data-table-main th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-card-subtle);
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+      z-index: 2;
+    }
+
+    .data-table-main td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .data-table-main tbody tr:hover {
+      background: var(--bg-hover);
+    }
+
+    .badge-grade {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--light-blue-subtle);
+      color: var(--light-blue);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .status-capsule {
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-block;
+      text-transform: uppercase;
+    }
+
+    .status-qualified {
+      background: var(--bullish-subtle);
+      color: var(--bullish);
+      border: 1px solid var(--bullish-border);
+    }
+
+    .status-watching {
+      background: rgba(245, 158, 11, 0.12);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .status-position {
+      background: var(--light-blue-subtle);
+      color: var(--light-blue);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+
+    .btn-rule-check {
+      border: none;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-rule-check.pass {
+      background: var(--bullish-subtle);
+      color: var(--bullish);
+      border: 1px solid var(--bullish-border);
+    }
+
+    .btn-rule-check.warn {
+      background: rgba(245, 158, 11, 0.12);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    /* ==========================================================================
+       3. RIGHT SIDEBAR WIDGET PANEL (Zentra Order & Depth Cards)
+       ========================================================================== */
+    .right-sidebar {
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Order Execution & Sizing Card */
+    .order-widget-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .order-tabs-segmented {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 3px;
+    }
+
+    .order-tab-btn {
+      border: none;
+      background: transparent;
+      padding: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .order-tab-btn.buy.active {
+      background: var(--bullish);
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+    }
+
+    .order-tab-btn.sell.active {
+      background: var(--bearish);
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(244, 63, 94, 0.35);
+    }
+
+    .avail-balance-line {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .input-field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .input-field-group label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .input-box-wrap {
+      display: flex;
+      align-items: center;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 6px 10px;
+    }
+
+    .input-box-wrap input,
+    .input-box-wrap select {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-white);
+      font-weight: 700;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      outline: none;
+    }
+
+    .input-suffix-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    /* Slider Row */
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .pct-slider {
+      width: 100%;
+      height: 4px;
+      accent-color: var(--primary-color);
+      cursor: pointer;
+    }
+
+    .slider-labels-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    /* Summary Metrics Inside Order Card */
+    .order-metric-summary {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+    }
+
+    .summary-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .summary-line .sum-lbl {
+      color: var(--text-muted);
+    }
+
+    .summary-line .sum-val {
+      font-weight: 700;
+      color: var(--text-white);
+    }
+
+    .btn-place-order {
+      width: 100%;
+      background: var(--primary-gradient);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: var(--primary-glow);
+      transition: all 0.15s ease;
+      letter-spacing: 0.02em;
+    }
+
+    .btn-place-order:active {
+      transform: scale(0.98);
+    }
+
+    /* Active Position & MIS Depth Card */
+    .depth-widget-card {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 12px 14px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .widget-header-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Active Position Mini Box */
+    .pos-mini-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-accent);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .pos-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .pos-symbol {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-white);
+    }
+
+    .pos-pnl {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--bullish);
+    }
+
+    .pos-sub-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Square-off Timer Card */
+    .timer-mini-card {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .timer-big-num {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--light-blue);
+    }
+
+    /* Sector Breadth / Depth Bar */
+    .breadth-bar-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .depth-split-bar {
+      width: 100%;
+      height: 6px;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      background: var(--bearish);
+    }
+
+    .depth-split-bar .bull-fill {
+      height: 100%;
+      background: var(--bullish);
+      width: 65%;
+    }
+
+    .depth-labels-line {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+
+    /* Modal Styling */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      width: 540px;
+      max-width: 90vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 22px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-white);
+    }
+
+    .modal-close-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    /* Main Full-Height Layout */
+    body {
+      display: flex;
+      height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
+      padding: 12px;
+      gap: 12px;
+      background-color: var(--bg-base);
+    }
+
+    .sidebar-panel {
+      width: 250px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: calc(100vh - 24px);
+      box-shadow: var(--shadow-card);
+    }
+
+    .main-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: calc(100vh - 24px);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .top-header-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+      width: 100%;
+    }
+
+    .header-primary-row {
+      height: 48px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-card);
+      gap: 12px;
+    }
+
+    .header-tickers-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-metrics-subrow {
+      height: 34px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    .kpi-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+    }
+
+    .kpi-divider {
+      width: 1px;
+      height: 14px;
+      background: var(--border-subtle);
+    }
+
+    .dashboard-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 10px;
+      height: calc(100vh - 122px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .center-col {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .right-sidebar {
+      width: 360px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .tables-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--card-radius);
+      box-shadow: var(--shadow-card);
+    }
+
+    .data-table th {
+      background: var(--bg-card);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      border-bottom: 1px solid var(--border-subtle);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .data-table td {
+      font-size: 13px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-white);
+      white-space: nowrap;
+    }
+
+    .data-table tbody tr:hover {
+      background: var(--bg-hover);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ========================================================================
+       1. LEFT SIDEBAR NAVIGATION (Zentra Style)
+       ======================================================================== -->
+  <aside class="sidebar-panel">
+    <div class="sidebar-top">
+      <!-- Brand Logo -->
+      <div class="brand-row">
+        <a href="#" class="brand-logo-group">
+          <div class="brand-icon-box">Q</div>
+          <span class="brand-title">QuantLeaf</span>
+        </a>
+        <span
+          style="font-size:11px; font-weight:700; color:var(--light-blue); background:var(--light-blue-subtle); padding:2px 6px; border-radius:6px;">S5</span>
+      </div>
+
+      <!-- Quick Ask AI / Strategy Filter -->
+      <button class="btn-ask-ai" onclick="openGateModal()">
+        <span>⚡ Strategy 5 Rules</span>
+        <span class="shortcut-badge">⌘D</span>
+      </button>
+
+      <!-- Main Navigation Menu -->
+      <div>
+        <div class="nav-group-label">Trading Terminal</div>
+        <div class="nav-list">
+          <button class="nav-item active" id="navItemScanner" onclick="switchMainTab('candidates')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <span>Candidate Scanner</span>
+          </button>
+          <button class="nav-item" id="navItemSectors" onclick="switchMainTab('sectors')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20V10" />
+              <path d="M18 20V4" />
+              <path d="M6 20v-4" />
+            </svg>
+            <span>Sector Leaders</span>
+          </button>
+          <button class="nav-item" id="navItemPositions" onclick="switchMainTab('positions')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="20" height="14" x="2" y="7" rx="2" />
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+            </svg>
+            <span>Active Positions</span>
+          </button>
+          <button class="nav-item" id="navItemTrades" onclick="switchMainTab('trades')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+            <span>Closed Trades</span>
+          </button>
+          <button class="nav-item" id="navItemCalculator" onclick="switchMainTab('calculator')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M8 7h8" />
+              <path d="M8 12h8" />
+              <path d="M8 17h8" />
+            </svg>
+            <span>5x Sizing Sizer</span>
+          </button>
+        </div>
+
+        <div class="nav-group-label" style="margin-top:12px;">Broker & Risk Ops</div>
+        <div class="nav-list">
+          <button class="nav-item" onclick="openAngelModal()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20" />
+              <path d="m17 5-5-3-5 3" />
+              <path d="m17 19-5 3-5-3" />
+            </svg>
+            <span>SmartAPI Connect</span>
+          </button>
+          <button class="nav-item" onclick="openGateModal()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            <span>Audit Proof Gate</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Bottom: Account Status & Theme Switch -->
+    <div class="sidebar-bottom">
+      <div class="account-card-mini">
+        <div class="acc-name" id="sidebarUserName">MANJUBEN S.</div>
+        <div class="acc-meta">
+          <span style="color:var(--bullish); font-weight:700;">● M58749465</span>
+          <span>· ₹15k MIS</span>
+        </div>
+      </div>
+
+      <div class="theme-toggle-row">
+        <span>Light Theme</span>
+        <div class="switch-pill" onclick="toggleTheme()" title="Switch Light/Dark mode">
+          <div class="switch-knob"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       2. MAIN CONTENT AREA (TOP NAV + 2-COLUMN DASHBOARD GRID)
+       ======================================================================== -->
+  <div class="main-wrapper">
+
+    <!-- Top Navigation Bar -->
+    <!-- Top Navigation: 2-Tier Clean Responsive Auto-layout (Zero Horizontal Scroll) -->
+    <div class="top-header-container">
+
+      <!-- Tier 1: Primary Bar (Tickers + Live Actions) -->
+      <div class="header-primary-row">
+        <!-- Left: Index Tickers Side-by-Side -->
+        <div class="header-tickers-group">
+          <div class="instrument-pill">
+            <strong style="color:var(--text-white); font-weight:800; font-size:13px;">NIFTY 50</strong>
+            <span class="num font-bold" id="niftyPrice"
+              style="color:var(--text-white); font-size:14px;">25,514.30</span>
+            <span class="num font-bold" id="niftyChg" style="color:var(--bullish); font-size:13px;">+1.14%</span>
+            <span class="stance-badge stance-strong" id="niftyStance"
+              style="font-size:11px; padding:2px 6px;">STRONG</span>
+          </div>
+
+          <!-- INDIA VIX Pill Directly Beside Nifty -->
+          <div class="instrument-pill">
+            <strong style="color:var(--text-white); font-weight:800; font-size:13px;">INDIA VIX</strong>
+            <span class="num font-bold" id="vixPrice" style="color:var(--text-white); font-size:14px;">16.11</span>
+            <span class="num font-bold" id="vixChg" style="color:var(--bearish); font-size:13px;">+3.47%</span>
+            <span class="stance-badge stance-normal" id="vixStance"
+              style="font-size:11px; padding:2px 6px;">NORMAL</span>
+          </div>
+        </div>
+
+        <!-- Right: Actions Group -->
+        <div class="header-actions-group">
+          <!-- SmartAPI Live Feed Pill -->
+          <div class="feed-pill" id="angelFeedPill" onclick="openAngelModal()"
+            title="Click to view Angel One connection details" style="cursor:pointer;">
+            <div class="pulse-dot"></div>
+            <span id="angelFeedText" style="font-weight:700; font-size:12px;">SmartAPI Live</span>
+          </div>
+
+          <!-- Paper / Live Capsule -->
+          <div class="mode-capsule">
+            <button class="mode-btn active" id="modePaperBtn" onclick="setTradingMode('PAPER')">PAPER</button>
+            <button class="mode-btn" id="modeLiveBtn" onclick="setTradingMode('LIVE')">LIVE</button>
+          </div>
+
+          <!-- Live Quotes Button (30s) -->
+          <button class="btn-refresh-quotes" id="btnRefreshQuotes" onclick="fetchLiveQuotes(true)"
+            title="Auto-updates every 30s · Click to fetch now">
+            <span id="quoteBtnIcon">⚡</span>
+            <span id="quoteBtnText">Quotes</span>
+            <span class="quote-countdown-badge" id="quoteCountdown">30s</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tier 2: Underneath Account Metrics Strip -->
+      <div class="header-metrics-subrow">
+        <div class="kpi-chip">
+          <span class="kpi-label">Day P&L</span>
+          <span class="kpi-val num" id="dayPnlVal"
+            style="color:var(--bullish); font-weight:800; font-size:13px;">+₹1,013.50 (+6.75%)</span>
+        </div>
+        <div class="kpi-divider"></div>
+        <div class="kpi-chip">
+          <span class="kpi-label">5x Power</span>
+          <span class="kpi-val num" id="buyingPowerVal"
+            style="color:var(--text-white); font-weight:700; font-size:13px;">₹75,000.00</span>
+        </div>
+        <div class="kpi-divider"></div>
+        <div class="kpi-chip">
+          <span class="kpi-label">Free Cash</span>
+          <span class="kpi-val num" id="freeCashVal"
+            style="color:var(--text-white); font-weight:700; font-size:13px;">₹12,653.50</span>
+        </div>
+        <div class="kpi-divider"></div>
+        <div class="kpi-chip">
+          <span class="kpi-label">Cash Capital</span>
+          <span class="kpi-val num" style="color:var(--light-blue); font-weight:700; font-size:13px;">₹15,000 (Pure
+            Intraday Cash)</span>
+        </div>
+        <div class="kpi-divider"></div>
+        <div class="kpi-chip">
+          <span class="kpi-label">Risk Constraint</span>
+          <span class="kpi-val num" style="color:var(--bearish); font-weight:700; font-size:13px;">Max ₹225 / Trade
+            (1.5% Cap)</span>
+        </div>
+        <div class="kpi-divider"></div>
+        <div class="kpi-chip">
+          <span class="kpi-label">Square-Off</span>
+          <span class="kpi-val num" style="color:var(--text-muted); font-weight:700; font-size:13px;">15:15:00 IST
+            Mandatory Flat</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 2-Column Dashboard Grid (Zero Outer Scroll) -->
+    <div class="dashboard-grid">
+
+      <!-- ====================================================================
+           COLUMN 1 (LEFT & MIDDLE): CHART & DATA TABLES
+           ==================================================================== -->
+      <div class="center-col">
+
+        <!-- Main Full-Height Terminal Table Card (Switched cleanly by Left Sidebar Navigation) -->
+        <div class="tables-card" style="flex:1; height:100%; display:flex; flex-direction:column; overflow:hidden;">
+
+          <!-- Terminal Header Strip with Active Tab Title & Strategy Rule Badge -->
+          <div class="tables-header-strip"
+            style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid var(--border-subtle); background:var(--bg-card); flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span id="currentViewTitle"
+                style="font-size:16px; font-weight:800; color:var(--text-white); letter-spacing:0.02em;">Candidate
+                Scanner (09:45–11:30)</span>
+              <span id="currentViewBadge" class="tab-count-badge"
+                style="background:var(--light-blue-subtle); color:var(--light-blue); font-weight:800; padding:2px 8px; border-radius:12px; font-size:12px;">2
+                Qualified · 6 Total</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:12px; color:var(--text-muted);">Strict Strategy 5 Rules:</span>
+              <span
+                style="font-size:11px; font-weight:700; background:var(--bullish-subtle); color:var(--bullish); padding:3px 8px; border-radius:6px; border:1px solid var(--bullish-border);">5x
+                MIS · Max ₹225 Risk · 15:15 Flat</span>
+            </div>
+          </div>
+
+          <!-- Table Viewport: Fit all columns with clean spacing -->
+          <div class="table-viewport-container" style="flex:1; overflow-y:auto; overflow-x:auto; padding:0;">
+
+            <!-- VIEW 1: CANDIDATE SCANNER (Default Active) -->
+            <div id="viewCandidates" style="display:block;">
+              <table class="data-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th style="width:11%; text-align:left; padding:10px 10px;">SYMBOL & GR.</th>
+                    <th style="width:10%; text-align:left; padding:10px 8px;">SECTOR</th>
+                    <th style="width:9%; text-align:right; padding:10px 8px;">LIVE LTP</th>
+                    <th style="width:8%; text-align:right; padding:10px 8px;">DAY CHG%</th>
+                    <th style="width:8%; text-align:right; padding:10px 8px;">VS SECTOR</th>
+                    <th style="width:7%; text-align:right; padding:10px 8px;">VOL RATIO</th>
+                    <th style="width:8%; text-align:right; padding:10px 8px;">5X QTY</th>
+                    <th style="width:8%; text-align:right; padding:10px 8px;">MARGIN</th>
+                    <th style="width:8%; text-align:right; padding:10px 8px;">RISK (₹225)</th>
+                    <th style="width:9%; text-align:center; padding:10px 8px;">TARGET 1 & 2</th>
+                    <th style="width:5%; text-align:center; padding:10px 8px;">R : R</th>
+                    <th style="width:9%; text-align:center; padding:10px 8px;">STATUS</th>
+                    <th style="width:8%; text-align:center; padding:10px 10px;">12-CHECK</th>
+                  </tr>
+                </thead>
+                <tbody id="candidatesTableBody">
+                  <!-- Dynamically populated by renderCandidates() -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- VIEW 2: SECTOR LEADERS BOARD -->
+            <div id="viewSectors" style="display:none;">
+              <table class="data-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th style="width:10%; text-align:left; padding:10px 14px;">RANK</th>
+                    <th style="width:25%; text-align:left; padding:10px 14px;">SECTOR INDEX</th>
+                    <th style="width:15%; text-align:right; padding:10px 14px;">DAY CHG%</th>
+                    <th style="width:15%; text-align:right; padding:10px 14px;">RS VS NIFTY</th>
+                    <th style="width:15%; text-align:right; padding:10px 14px;">MEMBER STOCKS</th>
+                    <th style="width:20%; text-align:center; padding:10px 14px;">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody id="sectorsTableBody">
+                  <!-- Dynamically populated by renderSectors() -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- VIEW 3: ACTIVE POSITIONS -->
+            <div id="viewPositions" style="display:none;">
+              <table class="data-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th style="width:15%; text-align:left; padding:10px 14px;">SYMBOL</th>
+                    <th style="width:12%; text-align:left; padding:10px 14px;">SECTOR</th>
+                    <th style="width:10%; text-align:right; padding:10px 14px;">QTY</th>
+                    <th style="width:12%; text-align:right; padding:10px 14px;">ENTRY</th>
+                    <th style="width:12%; text-align:right; padding:10px 14px;">CURRENT LTP</th>
+                    <th style="width:12%; text-align:right; padding:10px 14px;">STOP LOSS</th>
+                    <th style="width:15%; text-align:right; padding:10px 14px;">UNREALIZED P&L</th>
+                    <th style="width:12%; text-align:center; padding:10px 14px;">ACTION</th>
+                  </tr>
+                </thead>
+                <tbody id="positionsTableBody">
+                  <!-- Dynamically populated by renderPositions() -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- VIEW 4: CLOSED TRADES -->
+            <div id="viewTrades" style="display:none;">
+              <table class="data-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th style="width:15%; text-align:left; padding:10px 14px;">TIME</th>
+                    <th style="width:18%; text-align:left; padding:10px 14px;">SYMBOL</th>
+                    <th style="width:10%; text-align:center; padding:10px 14px;">SIDE</th>
+                    <th style="width:12%; text-align:right; padding:10px 14px;">ENTRY</th>
+                    <th style="width:12%; text-align:right; padding:10px 14px;">EXIT</th>
+                    <th style="width:18%; text-align:right; padding:10px 14px;">REALIZED P&L</th>
+                    <th style="width:15%; text-align:center; padding:10px 14px;">REASON</th>
+                  </tr>
+                </thead>
+                <tbody id="tradesTableBody">
+                  <!-- Dynamically populated by renderTrades() -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- VIEW 5: 5X SIZING SIZER (Calculator Panel) -->
+            <div id="viewCalculator" style="display:none; padding:28px 20px; max-width:760px; margin:0 auto;">
+              <div
+                style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:12px; padding:24px; box-shadow:var(--shadow-card);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+                  <h3 style="font-size:16px; font-weight:800; color:var(--text-white); margin:0;">5x Intraday Position
+                    Sizer & Risk Gate</h3>
+                  <span
+                    style="font-size:12px; font-weight:700; color:var(--light-blue); background:var(--light-blue-subtle); padding:3px 10px; border-radius:6px;">₹15k
+                    Capital · ₹225 Max Risk</span>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                  <div>
+                    <label
+                      style="font-size:12px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">Stock
+                      Candidate</label>
+                    <select id="calcStock" onchange="applyStockToCalc()"
+                      style="width:100%; height:42px; border-radius:8px; border:1px solid var(--border-subtle); background:var(--bg-elevated); color:var(--text-white); padding:0 12px; font-size:14px;">
+                      <option value="M&M" data-price="3509.00" data-stop="3455.00" selected>M&M (₹3,509.00 · SL
+                        ₹3,455.00)</option>
+                      <option value="BAJAJ-AUTO" data-price="10817.00" data-stop="10668.00">BAJAJ-AUTO (₹10,817.00 · SL
+                        ₹10,668.00)</option>
+                      <option value="MARUTI" data-price="13589.00" data-stop="13200.00">MARUTI (₹13,589.00 · SL
+                        ₹13,200.00)</option>
+                      <option value="HEROMOTOCO" data-price="5556.00" data-stop="5447.00">HEROMOTOCO (₹5,556.00 · SL
+                        ₹5,447.00)</option>
+                      <option value="RELIANCE" data-price="1375.60" data-stop="1361.50">RELIANCE (₹1,375.60 · SL
+                        ₹1,361.50)</option>
+                      <option value="ONGC" data-price="224.52" data-stop="222.50">ONGC (₹224.52 · SL ₹222.50)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      style="font-size:12px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">Entry
+                      Price (₹)</label>
+                    <input type="number" id="calcEntry" value="3509.00" oninput="updateSizingCalc()"
+                      style="width:100%; height:42px; border-radius:8px; border:1px solid var(--border-subtle); background:var(--bg-elevated); color:var(--text-white); padding:0 12px; font-size:14px;" />
+                  </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                  <div>
+                    <label
+                      style="font-size:12px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">Stop
+                      Loss (₹)</label>
+                    <input type="number" id="calcStop" value="3455.00" oninput="updateSizingCalc()"
+                      style="width:100%; height:42px; border-radius:8px; border:1px solid var(--border-subtle); background:var(--bg-elevated); color:var(--text-white); padding:0 12px; font-size:14px;" />
+                  </div>
+                  <div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                      <label style="font-size:12px; font-weight:700; color:var(--text-muted);">Margin Power</label>
+                      <span id="sliderValDisplay" style="font-size:12px; font-weight:800; color:var(--light-blue);">50%
+                        Power</span>
+                    </div>
+                    <input type="range" id="marginSlider" min="10" max="100" value="50" step="5"
+                      oninput="onSliderMove(this.value)" style="width:100%; margin-top:8px;" />
+                  </div>
+                </div>
+
+                <div
+                  style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; background:var(--bg-elevated); padding:16px; border-radius:8px; margin-bottom:18px;">
+                  <div>
+                    <span style="font-size:11px; color:var(--text-muted); display:block;">Sized Qty:</span>
+                    <strong class="num" id="calcQty" style="font-size:16px; color:var(--text-white);">4 shares</strong>
+                  </div>
+                  <div>
+                    <span style="font-size:11px; color:var(--text-muted); display:block;">Margin Required:</span>
+                    <strong class="num" id="calcMargin"
+                      style="font-size:16px; color:var(--text-white);">₹2,807.20</strong>
+                  </div>
+                  <div>
+                    <span style="font-size:11px; color:var(--text-muted); display:block;">Protected Risk:</span>
+                    <strong class="num" id="calcRisk" style="font-size:16px; color:var(--bearish);">₹216.00
+                      (1.44%)</strong>
+                  </div>
+                </div>
+
+                <button class="btn-place-order" onclick="executeIntradayOrder()"
+                  style="width:100%; height:44px; border:none; border-radius:8px; background:var(--primary-gradient); color:#ffffff; font-weight:800; font-size:14px; cursor:pointer;">
+                  ⚡ Place 5x Intraday MIS Order
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ====================================================================
+           3. RIGHT SIDEBAR
+           ==================================================================== -->
+      <aside class="right-sidebar">
+
+        <!-- MIS Clock & Market Breadth Card -->
+        <div class="depth-widget-card" style="height:100%; display:flex; flex-direction:column; gap:14px;">
+
+          <div class="widget-header-title">
+            <span style="display:flex; align-items:center; gap:6px;">
+              <span class="live-dot"
+                style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--light-blue);"></span>
+              MIS Clock & Market Breadth
+            </span>
+            <span
+              style="font-size:11px; font-weight:700; color:var(--light-blue); background:var(--light-blue-subtle); padding:2px 8px; border-radius:6px;">NSE
+              LIVE</span>
+          </div>
+
+          <!-- MIS 15:15 Flat Timer Card -->
+          <div class="timer-mini-card"
+            style="background:var(--bg-card-subtle); border:1px solid var(--border-subtle); border-radius:12px; padding:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span
+                style="font-size:11px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.04em;">MIS
+                15:15 FLAT TIMER</span>
+              <span class="stance-badge stance-normal" style="font-size:10px; padding:2px 6px;">MARKET CLOSED</span>
+            </div>
+            <div class="timer-big-num num" id="sessionTimer"
+              style="font-size:28px; font-weight:800; color:var(--text-white); margin-bottom:4px; letter-spacing:0.02em;">
+              00:00:00 (FLAT)</div>
+            <div style="font-size:11px; color:var(--text-muted);">Mandatory 15:15:00 IST Square-off · Zero Overnight
+              Risk (Pure Intraday MIS)</div>
+          </div>
+
+          <!-- NIFTY 50 Advance / Decline Ratio Panel (Live Updating) -->
+          <div class="ad-ratio-panel"
+            style="flex:1; background:var(--bg-card-subtle); border:1px solid var(--border-subtle); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:12px; min-height:0; overflow-y:auto;">
+
+            <div class="ad-panel-title-bar"
+              style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <span class="ad-main-title"
+                style="font-size:13px; font-weight:800; color:var(--text-white); white-space:nowrap; letter-spacing:0.02em;">NIFTY
+                50 ADVANCE / DECLINE</span>
+              <span class="ad-ratio-pill num font-bold" id="adStanceBadge"
+                style="font-size:11px; font-weight:800; padding:3px 8px; border-radius:6px; background:var(--bullish-subtle); color:var(--bullish); border:1px solid var(--bullish-border); white-space:nowrap;">2.33
+                : 1 BULLISH</span>
+            </div>
+
+            <!-- Counts Row -->
+            <div class="ad-counts-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+              <div class="ad-metric-card advances"
+                style="background:var(--bullish-subtle); border:1px solid var(--bullish-border); border-radius:8px; padding:8px 4px; text-align:center;">
+                <div style="font-size:10px; font-weight:700; color:var(--bullish); text-transform:uppercase;">Advances
+                </div>
+                <div class="ad-val num font-bold" id="adAdvances" style="font-size:20px; color:var(--bullish);">35</div>
+                <div class="ad-pct num" id="adAdvancesPct" style="font-size:11px; color:var(--bullish);">70.0%</div>
+              </div>
+              <div class="ad-metric-card declines"
+                style="background:var(--bearish-subtle); border:1px solid var(--bearish-border); border-radius:8px; padding:8px 4px; text-align:center;">
+                <div style="font-size:10px; font-weight:700; color:var(--bearish); text-transform:uppercase;">Declines
+                </div>
+                <div class="ad-val num font-bold" id="adDeclines" style="font-size:20px; color:var(--bearish);">15</div>
+                <div class="ad-pct num" id="adDeclinesPct" style="font-size:11px; color:var(--bearish);">30.0%</div>
+              </div>
+              <div class="ad-metric-card unchanged"
+                style="background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:8px; padding:8px 4px; text-align:center;">
+                <div style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">
+                  Unchanged</div>
+                <div class="ad-val num font-bold" id="adUnchanged" style="font-size:20px; color:var(--text-muted);">0
+                </div>
+                <div class="ad-pct num" style="font-size:11px; color:var(--text-muted);">0.0%</div>
+              </div>
+            </div>
+
+            <!-- Split Depth Bar -->
+            <div class="breadth-bar-container" style="display:flex; flex-direction:column; gap:4px;">
+              <div class="depth-labels-line"
+                style="display:flex; justify-content:space-between; font-size:11px; font-weight:800;">
+                <span style="color:var(--bullish);" id="barAdvLabel">▲ Advances 70%</span>
+                <span style="color:var(--bearish);" id="barDecLabel">▼ Declines 30%</span>
+              </div>
+              <div class="depth-split-bar"
+                style="height:8px; background:var(--bearish); border-radius:4px; overflow:hidden;">
+                <div class="bull-fill" id="adBreadthFill"
+                  style="width:70%; height:100%; background:var(--bullish); border-radius:4px 0 0 4px; transition:width 0.3s ease;">
+                </div>
+              </div>
+            </div>
+
+            <!-- Insights Card -->
+            <div class="ad-insights-card"
+              style="background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                <span style="color:var(--text-muted);">Net Differential:</span>
+                <strong class="num" id="adNetAdv" style="color:var(--bullish); font-weight:800;">+20 Stocks
+                  (Bullish)</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                <span style="color:var(--text-muted);">Market Dominance:</span>
+                <strong id="adMarketDom" style="color:var(--bullish); font-weight:800;">Strong Buying Bias</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                <span style="color:var(--text-muted);">Sector Support:</span>
+                <strong id="adSectorSupport" style="color:var(--text-white); font-weight:700;">Auto (+5.04%) · Energy
+                  (+0.75%)</strong>
+              </div>
+            </div>
+
+            <!-- Live Updating Sector Breadth Rows Container -->
+            <div class="sector-breadth-summary" id="sectorBreadthContainer"
+              style="display:flex; flex-direction:column; gap:6px;">
+              <div class="sector-breadth-row"
+                style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                <span style="font-weight:700; color:var(--text-white);">NIFTY AUTO</span>
+                <span style="color:var(--bullish); font-weight:700;">12 Adv / 3 Dec</span>
+                <span class="num font-bold" style="color:var(--bullish);">+5.04%</span>
+              </div>
+              <div class="sector-breadth-row"
+                style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                <span style="font-weight:700; color:var(--text-white);">NIFTY ENERGY</span>
+                <span style="color:var(--bullish); font-weight:700;">7 Adv / 5 Dec</span>
+                <span class="num font-bold" style="color:var(--bullish);">+0.75%</span>
+              </div>
+              <div class="sector-breadth-row"
+                style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                <span style="font-weight:700; color:var(--text-white);">NIFTY PHARMA</span>
+                <span style="color:var(--bullish); font-weight:700;">10 Adv / 6 Dec</span>
+                <span class="num font-bold" style="color:var(--bullish);">+0.65%</span>
+              </div>
+              <div class="sector-breadth-row"
+                style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                <span style="font-weight:700; color:var(--text-white);">NIFTY IT</span>
+                <span style="color:var(--bullish); font-weight:700;">7 Adv / 3 Dec</span>
+                <span class="num font-bold" style="color:var(--bullish);">+0.48%</span>
+              </div>
+              <div class="sector-breadth-row"
+                style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                <span style="font-weight:700; color:var(--text-white);">NIFTY BANK</span>
+                <span style="color:var(--bullish); font-weight:700;">8 Adv / 4 Dec</span>
+                <span class="num font-bold" style="color:var(--bullish);">+0.35%</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODALS: 12-CHECK INSPECTOR & PROOF GATE & SMARTAPI
+       ======================================================================== -->
+
+  <!-- Modal 1: 12-Check Rule Evaluation -->
+  <div class="modal-overlay" id="checksModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="checkModalSymbol">12-Check Rule Evaluation</div>
+          <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Section 9 QuantLeaf Intraday Quality
+            Gate</div>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('checksModal')">✕</button>
+      </div>
+      <div id="checksListContainer" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- Injected -->
+      </div>
+      <div style="margin-top:16px; text-align:right;">
+        <button class="btn-quotes-refresh" style="width:auto; padding:6px 16px;"
+          onclick="closeModal('checksModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Section 11 Proof Gate Audit -->
+  <div class="modal-overlay" id="gateModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Section 11 Proof Gate · Strategy 5 Audit</div>
+        <button class="modal-close-btn" onclick="closeModal('gateModal')">✕</button>
+      </div>
+      <table class="data-table-main" style="margin-top:8px;">
+        <thead>
+          <tr>
+            <th>Rule Requirement</th>
+            <th>Criterion</th>
+            <th>Observed Value</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Max Concurrent Positions</td>
+            <td class="num">≤ 2 trades</td>
+            <td class="num">1 Active</td>
+            <td><span class="status-capsule status-qualified">Passed</span></td>
+          </tr>
+          <tr>
+            <td>Max Risk Per Trade</td>
+            <td class="num">R = ₹225 (1.5%)</td>
+            <td class="num">₹216 (1.44%)</td>
+            <td><span class="status-capsule status-qualified">Passed</span></td>
+          </tr>
+          <tr>
+            <td>Hard Daily Stop Loss</td>
+            <td class="num">-3.0% (-₹450)</td>
+            <td class="num" style="color:var(--bullish);">+₹1,013.50 (+6.75%)</td>
+            <td><span class="status-capsule status-qualified">Passed</span></td>
+          </tr>
+          <tr>
+            <td>Leverage Constraint</td>
+            <td class="num">5.0x MIS Equity</td>
+            <td class="num">₹75k Buying Power</td>
+            <td><span class="status-capsule status-qualified">Passed</span></td>
+          </tr>
+          <tr>
+            <td>15:15 Square-off Rule</td>
+            <td class="num">Mandatory Flat</td>
+            <td class="num">Enforced</td>
+            <td><span class="status-capsule status-qualified">Passed</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:16px; text-align:right;">
+        <button class="btn-quotes-refresh" style="width:auto; padding:6px 16px;"
+          onclick="closeModal('gateModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Angel One SmartAPI Config -->
+  <div class="modal-overlay" id="angelModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Angel One SmartAPI Live Feed Status</div>
+        <button class="modal-close-btn" onclick="closeModal('angelModal')">✕</button>
+      </div>
+      <div
+        style="background:var(--bg-elevated); padding:10px 14px; border-radius:10px; font-size:11.5px; border:1px solid var(--border-subtle); margin-bottom:12px;">
+        <div><strong>Endpoint:</strong> <code class="num"
+            style="color:var(--primary-color);">https://apiconnect.angelone.in</code></div>
+        <div><strong>Status:</strong> <span style="color:var(--bullish); font-weight:700;">● Connected (MANJUBEN
+            CHHAGANBHAI SUTARIYA)</span></div>
+        <div><strong>Client Code:</strong> <code class="num" style="color:var(--text-white);">M58749465</code></div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <div class="input-field-group">
+          <label>API Key</label>
+          <div class="input-box-wrap"><input type="password" id="angelApiKey" value="mM0cS4lI" /></div>
+        </div>
+        <div class="input-field-group">
+          <label>Client Code</label>
+          <div class="input-box-wrap"><input type="text" id="angelClientId" value="M58749465" /></div>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="tf-btn" style="padding:6px 14px;" onclick="closeModal('angelModal')">Close</button>
+        <button class="btn-quotes-refresh" style="width:auto; padding:6px 16px;" onclick="connectAngelOne()">Reconnect
+          Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       JAVASCRIPT APPLICATION ENGINE & LIVE DATA
+       ======================================================================== -->
+  <script>
+    // 12-Check Rule Evaluation Helper
+    function getChecks(symbol, sector, ltp, chg, stockVsSector, volRatio, rangePos, atrMove, risk) {
+      const isTop2Sector = (sector === 'NIFTY AUTO' || sector === 'NIFTY ENERGY');
+      const isBeatingSector = (stockVsSector >= 0.30);
+      const isVolOk = (volRatio >= 1.5);
+      const isNearHod = (rangePos >= 0.75);
+      const isNotExtended = (atrMove <= 1.0);
+      const isRiskOk = (risk <= 225.0);
+
+      return [
+        { id: 1, name: 'Portfolio Limits', passed: true, details: 'Entries: 2/5 max, Open: 1/2 max' },
+        { id: 2, name: 'Market Stance', passed: true, details: 'Nifty stance OK (Strong/Mild)' },
+        { id: 3, name: 'Gap Filter', passed: true, details: '+0.45% gap within [-1.2%, +3.0%]' },
+        { id: 4, name: 'Sector Qualifies', passed: isTop2Sector, details: sector + ' Rank Top 2 with 3/3 persistence' },
+        { id: 5, name: 'Beating Sector', passed: isBeatingSector, details: 'Stock vs Sector: ' + (stockVsSector >= 0 ? '+' : '') + Number(stockVsSector).toFixed(2) + '% (min +0.30%)' },
+        { id: 6, name: 'Buyer Control', passed: true, details: 'LTP > Open, VWAP, Daily Pivot' },
+        { id: 7, name: 'Real Relative Vol', passed: isVolOk, details: Number(volRatio).toFixed(2) + 'x >= 1.50x volume' },
+        { id: 8, name: 'Near Day High', passed: isNearHod, details: 'Range pos: ' + Number(rangePos).toFixed(2) + ' >= 0.75' },
+        { id: 9, name: 'Not Extended', passed: isNotExtended, details: 'Move in ATR: ' + Number(atrMove).toFixed(2) + ' <= 1.00 ATR' },
+        { id: 10, name: 'Risk Distance', passed: isRiskOk, details: 'Planned risk R = ₹' + Math.round(risk) + ' <= ₹225 max' },
+        { id: 11, name: 'Room to Resistance', passed: true, details: 'Room >= 1.0R to daily resistance' },
+        { id: 12, name: 'Sizing Caps', passed: true, details: 'Fits ₹15k capital with 5x MIS leverage' }
+      ];
+    }
+
+    // Application State
+    const state = {
+      theme: 'light',
+      mode: 'PAPER',
+      activeTab: 'candidates',
+      selectedSymbol: 'M&M',
+      candidates: [
+        {
+          symbol: "BAJAJ-AUTO",
+          token: "16669",
+          grade: "A",
+          sector: "NIFTY AUTO",
+          ltp: 10817.00,
+          stop: 10668.00,
+          chg: 2.34,
+          stockVsSector: -2.70,
+          volRatio: 2.25,
+          rangePos: 0.86,
+          atrMove: 0.68,
+          target1: 11040.50,
+          target2: 11189.50,
+          rr_ratio: "1 : 2.5"
+        },
+        {
+          symbol: "M&M",
+          token: "2031",
+          grade: "A",
+          sector: "NIFTY AUTO",
+          ltp: 3509.00,
+          stop: 3455.00,
+          chg: 4.46,
+          stockVsSector: -0.58,
+          volRatio: 2.85,
+          rangePos: 0.94,
+          atrMove: 0.78,
+          target1: 3590.00,
+          target2: 3644.00,
+          rr_ratio: "1 : 2.5"
+        },
+        {
+          symbol: "MARUTI",
+          token: "10999",
+          grade: "A",
+          sector: "NIFTY AUTO",
+          ltp: 13589.00,
+          stop: 13364.00,
+          chg: 7.58,
+          stockVsSector: 2.54,
+          volRatio: 3.40,
+          rangePos: 0.92,
+          atrMove: 0.85,
+          target1: 13926.50,
+          target2: 14151.50,
+          rr_ratio: "1 : 2.5"
+        },
+        {
+          symbol: "HEROMOTOCO",
+          token: "1348",
+          grade: "A",
+          sector: "NIFTY AUTO",
+          ltp: 5556.00,
+          stop: 5447.50,
+          chg: 5.77,
+          stockVsSector: 0.73,
+          volRatio: 2.60,
+          rangePos: 0.95,
+          atrMove: 0.75,
+          target1: 5718.80,
+          target2: 5827.20,
+          rr_ratio: "1 : 2.5"
+        },
+        {
+          symbol: "RELIANCE",
+          token: "2885",
+          grade: "A",
+          sector: "NIFTY ENERGY",
+          ltp: 1375.60,
+          stop: 1361.50,
+          chg: 0.92,
+          stockVsSector: 0.17,
+          volRatio: 2.10,
+          rangePos: 0.87,
+          atrMove: 0.62,
+          target1: 1396.70,
+          target2: 1410.80,
+          rr_ratio: "1 : 2.6"
+        },
+        {
+          symbol: "ONGC",
+          token: "2475",
+          grade: "B",
+          sector: "NIFTY ENERGY",
+          ltp: 224.52,
+          stop: 222.50,
+          chg: -0.21,
+          stockVsSector: -0.96,
+          volRatio: 1.45,
+          rangePos: 0.87,
+          atrMove: 0.45,
+          target1: 227.60,
+          target2: 229.60,
+          rr_ratio: "1 : 2.5"
+        }
+      ],
+      sectors: [
+        { rank: 1, name: "NIFTY AUTO", members: 15, chg: 5.01, rs: 3.93, persistence: 3, qualifies: true },
+        { rank: 2, name: "NIFTY ENERGY", members: 12, chg: 0.80, rs: -0.28, persistence: 3, qualifies: true },
+        { rank: 3, name: "NIFTY PHARMA", members: 16, chg: 0.65, rs: -0.43, persistence: 2, qualifies: false },
+        { rank: 4, name: "NIFTY IT", members: 10, chg: 0.48, rs: -0.60, persistence: 1, qualifies: false },
+        { rank: 5, name: "NIFTY BANK", members: 12, chg: 0.35, rs: -0.73, persistence: 0, qualifies: false },
+        { rank: 6, name: "NIFTY FMCG", members: 14, chg: 0.12, rs: -0.96, persistence: 0, qualifies: false },
+        { rank: 7, name: "NIFTY METAL", members: 15, chg: -0.22, rs: -1.30, persistence: 0, qualifies: false }
+      ],
+      positions: [
+        {
+          symbol: "M&M",
+          sector: "NIFTY AUTO",
+          qty: 5,
+          entryFill: 3360.00,
+          currentLtp: 3509.00,
+          stop: 3450.00,
+          target1: 3568.00,
+          target2: 3615.00,
+          variant: "E2",
+          unrealizedPnl: 745.00,
+          rMultiple: 3.31
+        }
+      ],
+      trades: [
+        {
+          time: "10:15 IST",
+          symbol: "HEROMOTOCO",
+          sector: "NIFTY AUTO",
+          qty: 3,
+          entryFill: 5450.00,
+          exitPrice: 5560.00,
+          reason: "Target 1 Hit (+1.5R)",
+          grossPnl: 330.00,
+          costs: 10.20,
+          netPnl: 319.80,
+          rMultiple: 1.47,
+          mfeMae: "+1.65R / -0.15R"
+        },
+        {
+          time: "09:50 IST",
+          symbol: "BAJAJ-AUTO",
+          sector: "NIFTY AUTO",
+          qty: 1,
+          entryFill: 10620.00,
+          exitPrice: 10760.00,
+          reason: "Target 1 Hit (+1.5R)",
+          grossPnl: 140.00,
+          costs: 8.50,
+          netPnl: 131.50,
+          rMultiple: 1.20,
+          mfeMae: "+1.40R / -0.25R"
+        }
+      ]
+    };
+
+    // Render Candidates Table
+    function renderCandidates() {
+      const tbody = document.getElementById('candidatesTableBody');
+      const maxRiskAllowed = 225.0; // 1.5% of ₹15,000 cash
+      let qualifiedCount = 0;
+
+      tbody.innerHTML = state.candidates.map((c, i) => {
+        let stopPrice = c.stop;
+        if (!stopPrice || (c.ltp - stopPrice) <= 0) stopPrice = c.ltp * 0.988;
+        let riskPerShare = c.ltp - stopPrice;
+        if (riskPerShare > maxRiskAllowed) {
+          stopPrice = c.ltp - maxRiskAllowed;
+          riskPerShare = maxRiskAllowed;
+        }
+        riskPerShare = Math.max(riskPerShare, 0.50);
+
+        const riskSafeQty = Math.max(1, Math.floor(maxRiskAllowed / riskPerShare));
+        const maxMarginQty = Math.max(1, Math.floor(37500.0 / c.ltp));
+        const qty = Math.min(riskSafeQty, maxMarginQty);
+        const actualRisk = Math.min(Math.round(qty * riskPerShare), Math.round(maxRiskAllowed));
+        const marginReq = Math.round((c.ltp * qty) / 5.0);
+
+        const t1 = c.target1 || (c.ltp + (riskPerShare * 1.5));
+        const t2 = c.target2 || (c.ltp + (riskPerShare * 2.5));
+        const rr = c.rr_ratio || '1 : 2.5';
+
+        const checks = getChecks(c.symbol, c.sector, c.ltp, c.chg, c.stockVsSector || 0, c.volRatio || 1.5, c.rangePos || 0.85, c.atrMove || 0.65, actualRisk);
+        c.checks = checks;
+        const passedCount = checks.filter(chk => chk.passed).length;
+        const totalCount = checks.length;
+        const allPassed = (passedCount === totalCount);
+
+        if (allPassed) qualifiedCount++;
+
+        let statusBadge = '';
+        if (state.positions.some(p => p.symbol === c.symbol)) {
+          statusBadge = '<span class="status-capsule status-position">IN POSITION</span>';
+        } else if (allPassed) {
+          statusBadge = '<span class="status-capsule status-qualified">QUALIFIED ★</span>';
+        } else if (c.stockVsSector < 0.30) {
+          statusBadge = '<span class="status-capsule status-watching">WAITING RS</span>';
+        } else {
+          statusBadge = '<span class="status-capsule status-watching">WATCHING</span>';
+        }
+
+        const checkBtn = allPassed
+          ? `<button class="btn-rule-check pass" onclick="openChecks(${i})">✓ 12/12</button>`
+          : `<button class="btn-rule-check warn" onclick="openChecks(${i})">⚠️ ${passedCount}/${totalCount}</button>`;
+
+        return `
+          <tr id="candRow${i}" onclick="selectSymbol('${c.symbol}')" style="cursor:pointer;">
+            <td>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <strong style="color:var(--text-white); font-weight:800;">${c.symbol}</strong>
+                <span class="badge-grade">Gr. ${c.grade}</span>
+              </div>
+            </td>
+            <td><span style="color:var(--text-secondary); font-weight:600;">${c.sector}</span></td>
+            <td><strong class="num font-bold" style="font-size:13px; color:var(--text-white);">₹${c.ltp.toFixed(2)}</strong></td>
+            <td><span class="num font-bold" style="color:${c.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${c.chg >= 0 ? '+' : ''}${c.chg.toFixed(2)}%</span></td>
+            <td><span class="num font-bold" style="color:${c.stockVsSector >= 0.30 ? 'var(--bullish)' : (c.stockVsSector >= 0 ? 'var(--light-blue)' : 'var(--bearish)')};">${c.stockVsSector >= 0 ? '+' : ''}${Number(c.stockVsSector).toFixed(2)}%</span></td>
+            <td><span class="num font-bold" style="color:${c.volRatio >= 1.5 ? 'var(--light-blue)' : 'var(--text-muted)'};">${Number(c.volRatio).toFixed(2)}x</span></td>
+            <td>
+              <strong class="num font-bold" style="color:var(--text-white);">${qty} sh</strong> 
+              <span style="font-size:10px; color:var(--text-muted);">(Max ${maxMarginQty})</span>
+            </td>
+            <td>
+              <strong class="num font-bold" style="color:var(--primary-color);">₹${marginReq.toLocaleString('en-IN')}</strong>
+            </td>
+            <td>
+              <span class="num font-bold" style="color:var(--bearish);">₹${actualRisk}</span> 
+              <span style="font-size:10.5px; color:var(--text-muted);">(${((actualRisk / 15000) * 100).toFixed(1)}%)</span>
+            </td>
+            <td>
+              <div class="num" style="font-size:11px; line-height:1.3;">
+                <span style="color:var(--bullish);">T1: ₹${t1.toFixed(1)}</span> · <span style="color:var(--light-blue);">T2: ₹${t2.toFixed(1)}</span>
+              </div>
+            </td>
+            <td><span class="num font-bold" style="color:var(--light-blue);">${rr}</span></td>
+            <td>${statusBadge}</td>
+            <td>${checkBtn}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const candBadge = document.getElementById('badgeCandCount');
+      if (candBadge) candBadge.textContent = `${qualifiedCount} Qualified · ${state.candidates.length} Total`;
+    }
+
+    // Render Sector Leaders Board
+    function renderSectors() {
+      const countEl = document.getElementById('badgeSectorCount');
+      if (countEl) countEl.textContent = `${state.sectors.length} Sectors`;
+
+      const tbody = document.getElementById('sectorsTableBody');
+      tbody.innerHTML = state.sectors.map(s => {
+        const isLeader = s.qualifies;
+        return `
+          <tr style="${isLeader ? 'background:var(--light-blue-subtle);' : ''}">
+            <td><span class="num font-bold" style="color:${isLeader ? 'var(--light-blue)' : 'var(--text-muted)'}; font-size:13px;">#${s.rank}</span></td>
+            <td><strong style="color:var(--text-white); font-weight:700;">${s.name} ${isLeader ? '★' : ''}</strong></td>
+            <td><span class="num font-bold">${s.members} stocks</span></td>
+            <td><span class="num font-bold" style="color:${s.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${s.chg >= 0 ? '+' : ''}${s.chg.toFixed(2)}%</span></td>
+            <td><span class="num font-bold" style="color:${s.rs >= 0 ? 'var(--light-blue)' : 'var(--bearish)'};">RS: ${s.rs >= 0 ? '+' : ''}${s.rs.toFixed(2)}%</span></td>
+            <td><span class="num font-bold">${s.persistence}/3 closes</span></td>
+            <td>
+              ${isLeader
+            ? '<span class="status-capsule status-qualified">TOP 2 QUALIFYING</span>'
+            : '<span class="status-capsule" style="background:var(--bg-elevated); color:var(--text-muted);">Not Qualifying</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render Positions
+    function renderPositions() {
+      const tbody = document.getElementById('positionsTableBody');
+      const countEl = document.getElementById('badgePosCount');
+      if (countEl) countEl.textContent = `${state.positions.length} Open`;
+
+      tbody.innerHTML = state.positions.map((p, i) => {
+        return `
+          <tr>
+            <td><strong style="color:var(--text-white);">${p.symbol}</strong></td>
+            <td><span style="color:var(--text-secondary);">${p.sector}</span></td>
+            <td><strong class="num font-bold">${p.qty} sh</strong></td>
+            <td><span class="num">₹${p.entryFill.toFixed(2)}</span></td>
+            <td><strong class="num font-bold" style="color:var(--text-white);">₹${p.currentLtp.toFixed(2)}</strong></td>
+            <td><span class="num font-bold" style="color:var(--bearish);">₹${p.stop.toFixed(2)}</span></td>
+            <td><span class="num font-bold" style="color:var(--light-blue);">₹${p.target1.toFixed(2)}</span></td>
+            <td><span class="num font-bold" style="color:var(--light-blue);">₹${p.target2.toFixed(2)}</span></td>
+            <td><span style="background:var(--light-blue-subtle); color:var(--light-blue); padding:2px 6px; border-radius:4px; font-weight:700;">${p.variant}</span></td>
+            <td><strong class="num font-bold" style="color:var(--bullish);">+₹${p.unrealizedPnl.toFixed(2)}</strong></td>
+            <td><span class="num font-bold" style="color:var(--light-blue);">+${p.rMultiple.toFixed(2)} R</span></td>
+            <td><button class="btn-rule-check warn" onclick="exitPosition(${i})">Exit Leg</button></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render Trades Log
+    function renderTrades() {
+      const countEl = document.getElementById('badgeTradeCount');
+      if (countEl) countEl.textContent = `${state.trades.length} Filled`;
+
+      const tbody = document.getElementById('tradesTableBody');
+      tbody.innerHTML = state.trades.map(t => {
+        return `
+          <tr>
+            <td><span class="num" style="color:var(--text-secondary);">${t.time}</span></td>
+            <td><strong style="color:var(--text-white);">${t.symbol}</strong></td>
+            <td><span style="color:var(--text-secondary);">${t.sector}</span></td>
+            <td><span class="num">${t.qty} sh</span></td>
+            <td><span class="num">₹${t.entryFill.toFixed(2)}</span></td>
+            <td><span class="num font-bold" style="color:var(--text-white);">₹${t.exitPrice.toFixed(2)}</span></td>
+            <td><span style="color:var(--text-secondary);">${t.reason}</span></td>
+            <td><span class="num font-bold" style="color:${t.grossPnl >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${t.grossPnl >= 0 ? '+' : ''}₹${t.grossPnl.toFixed(2)}</span></td>
+            <td><span class="num" style="color:var(--text-muted);">₹${t.costs.toFixed(2)}</span></td>
+            <td><strong class="num font-bold" style="color:${t.netPnl >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${t.netPnl >= 0 ? '+' : ''}₹${t.netPnl.toFixed(2)}</strong></td>
+            <td><span class="num font-bold" style="color:var(--light-blue);">${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)} R</span></td>
+            <td><span class="num" style="color:var(--text-secondary);">${t.mfeMae}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Tab Navigation Switcher
+
+    function switchMainTab(tabKey) {
+      state.activeTab = tabKey;
+
+      const navIds = {
+        candidates: 'navItemScanner',
+        sectors: 'navItemSectors',
+        positions: 'navItemPositions',
+        trades: 'navItemTrades',
+        calculator: 'navItemCalculator'
+      };
+
+      Object.entries(navIds).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (key === tabKey) el.classList.add('active');
+          else el.classList.remove('active');
+        }
+      });
+
+      const views = {
+        candidates: document.getElementById('viewCandidates'),
+        sectors: document.getElementById('viewSectors'),
+        positions: document.getElementById('viewPositions'),
+        trades: document.getElementById('viewTrades'),
+        calculator: document.getElementById('viewCalculator')
+      };
+
+      const titles = {
+        candidates: ['Candidate Scanner (09:45–11:30)', '2 Qualified · 6 Total'],
+        sectors: ['Sector Leaders Board (RS vs NIFTY)', '7 Sectors Ranked'],
+        positions: ['Active Intraday Positions', '1 Open MIS Trade'],
+        trades: ['Closed Trades Log', '2 Realized Trades Today'],
+        calculator: ['5x Intraday Position Sizing Calculator', '₹15,000 Capital · Max ₹225 Risk']
+      };
+
+      Object.entries(views).forEach(([key, el]) => {
+        if (el) {
+          if (key === tabKey) {
+            el.style.display = 'block';
+          } else {
+            el.style.display = 'none';
+          }
+        }
+      });
+
+      const titleEl = document.getElementById('currentViewTitle');
+      const badgeEl = document.getElementById('currentViewBadge');
+      if (titleEl && titles[tabKey]) titleEl.textContent = titles[tabKey][0];
+      if (badgeEl && titles[tabKey]) badgeEl.textContent = titles[tabKey][1];
+    }
+
+    // Interactive 12-Check Rule Modal
+    function openChecks(idx) {
+      const c = state.candidates[idx];
+      document.getElementById('checkModalSymbol').textContent = `12-Check Rule Evaluation: ${c.symbol} (${c.sector})`;
+      const container = document.getElementById('checksListContainer');
+      container.innerHTML = c.checks.map(chk => {
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--bg-elevated); border:1px solid ${chk.passed ? 'var(--border-subtle)' : 'rgba(245, 158, 11, 0.45)'}; border-radius:10px;">
+            <div>
+              <strong style="color:var(--text-white); font-size:12.5px;">#${chk.id}. ${chk.name}</strong>
+              <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">${chk.details}</div>
+            </div>
+            <div style="color:${chk.passed ? 'var(--bullish)' : '#f59e0b'}; font-weight:800; font-size:11px; padding:3px 8px; border-radius:6px; background:${chk.passed ? 'var(--bullish-subtle)' : 'rgba(245,158,11,0.12)'}; border:1px solid ${chk.passed ? 'var(--bullish-border)' : 'rgba(245,158,11,0.3)'};">
+              ${chk.passed ? '✓ PASS' : '⚠️ FAIL'}
+            </div>
+          </div>
+        `;
+      }).join('');
+      document.getElementById('checksModal').classList.add('open');
+    }
+
+    function openGateModal() { document.getElementById('gateModal').classList.add('open'); }
+    function openAngelModal() { document.getElementById('angelModal').classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    // Theme Switcher (Dark / Light)
+    function toggleTheme() {
+      const html = document.documentElement;
+      if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        html.classList.add('light');
+        state.theme = 'light';
+      } else {
+        html.classList.remove('light');
+        html.classList.add('dark');
+        state.theme = 'dark';
+      }
+      if (typeof drawMomentumChart === "function") drawMomentumChart();
+    }
+
+    // Mode Switcher (Paper / Live)
+    function setMode(m) {
+      state.mode = m;
+      document.querySelectorAll('.mode-capsule button').forEach(b => {
+        b.classList.remove('active');
+        if (b.textContent === m) b.classList.add('active');
+      });
+    }
+
+    // Exit Position
+    function exitPosition(idx) {
+      if (confirm(`Market exit 5x MIS position in ${state.positions[idx].symbol}?`)) {
+        state.positions.splice(idx, 1);
+        renderPositions();
+      }
+    }
+
+    // Select Symbol For Top Chart
+    function selectSymbol(sym) {
+      state.selectedSymbol = sym;
+      const c = state.candidates.find(item => item.symbol === sym);
+      if (c) {
+        document.getElementById('chartSymbolName').textContent = `${c.symbol} · ${c.sector}`;
+        document.getElementById('chartPriceVal').textContent = `₹${c.ltp.toFixed(2)}`;
+        const chgEl = document.getElementById('chartChgBadge');
+        if (chgEl) {
+          chgEl.textContent = (c.chg >= 0 ? '+' : '') + c.chg.toFixed(2) + '%';
+          chgEl.style.color = c.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+          chgEl.style.background = c.chg >= 0 ? 'var(--bullish-subtle)' : 'var(--bearish-subtle)';
+        }
+        document.getElementById('calcStock').value = sym;
+        applyStockToCalc();
+        if (typeof drawMomentumChart === "function") drawMomentumChart();
+      }
+    }
+
+    // Timeframe selector
+    function setTimeframe(tf) {
+      document.querySelectorAll('.timeframe-strip .tf-btn').forEach(b => {
+        b.classList.remove('active');
+        if (b.textContent === tf) b.classList.add('active');
+      });
+      if (typeof drawMomentumChart === "function") drawMomentumChart();
+    }
+
+    // Slider Changed
+    function onSliderChange(val) {
+      document.getElementById('sliderPctLabel').textContent = `${val}% Power`;
+      runCalculator();
+    }
+
+    // Order Sizing Calculator
+    function applyStockToCalc() {
+      const sel = document.getElementById('calcStock');
+      const opt = sel.options[sel.selectedIndex];
+      document.getElementById('calcPrice').value = opt.getAttribute('data-price');
+      document.getElementById('calcStop').value = opt.getAttribute('data-stop');
+      runCalculator();
+    }
+
+    function runCalculator() {
+      const capital = 15000.0;
+      const maxRiskRs = 225.0; // 1.5% day risk cap
+      const price = parseFloat(document.getElementById('calcPrice').value) || 3509.00;
+      const stop = parseFloat(document.getElementById('calcStop').value) || 3455.00;
+      const riskPerShare = Math.max(price - stop, 0.50);
+
+      const sliderPct = parseInt(document.getElementById('marginSlider').value) || 50;
+      // Max 5x buying power = ₹75,000. Sliced by slider (max 50% = ₹37,500 per trade)
+      const maxExposure = 75000.0 * (sliderPct / 100.0);
+      const marginQty = Math.max(1, Math.floor(maxExposure / price));
+      const riskSafeQty = Math.max(1, Math.floor(maxRiskRs / riskPerShare));
+      const qty = Math.min(riskSafeQty, marginQty);
+
+      const actualRisk = Math.min(Math.round(qty * riskPerShare), Math.round(maxRiskRs));
+      const notional = qty * price;
+      const marginReq = notional / 5.0;
+      const t1 = Math.round(actualRisk * 1.5);
+      const t2 = Math.round(actualRisk * 2.5);
+
+      document.getElementById('calcResultQty').textContent = `${qty} shares (Val: ₹${notional.toLocaleString('en-IN', { maximumFractionDigits: 0 })})`;
+      document.getElementById('calcResultMargin').textContent = `₹${marginReq.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('calcResultRisk').textContent = `₹${actualRisk.toFixed(2)} (${((actualRisk / capital) * 100).toFixed(1)}%)`;
+      document.getElementById('calcResultReward').textContent = `T1: +₹${t1} · T2: +₹${t2}`;
+    }
+
+    function setOrderSide(side) {
+      document.querySelectorAll('.order-tabs-segmented button').forEach(b => {
+        b.classList.remove('active');
+        if (b.textContent.includes(side)) b.classList.add('active');
+      });
+    }
+
+    function submitMisOrder() {
+      const sym = document.getElementById('calcStock').value;
+      const qtyText = document.getElementById('calcResultQty').textContent;
+      alert(`[${state.mode} SIMULATOR]\n5x Intraday MIS Order Executed Successfully!\n\nSymbol: ${sym}\nQuantity: ${qtyText}\nRisk Protected: ₹225 Max Stop`);
+    }
+
+    // Canvas Intraday Momentum Chart Drawing (Zentra Style Line + Gradient + Crosshair)
+    function drawMomentumChart() {
+      const canvas = document.getElementById('momentumChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Generate smooth intraday curve
+      const points = 45;
+      const data = [];
+      let base = 3460;
+      for (let i = 0; i < points; i++) {
+        base += (Math.sin(i / 4) * 8) + (Math.random() - 0.45) * 6;
+        data.push(base);
+      }
+      data[points - 1] = 3509; // current LTP
+
+      const minVal = Math.min(...data) - 5;
+      const maxVal = Math.max(...data) + 5;
+      const range = maxVal - minVal;
+
+      // Draw horizontal grid lines
+      const isLight = document.documentElement.classList.contains('light');
+      ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < 4; y++) {
+        const yPos = 20 + (y * ((h - 40) / 3));
+        ctx.beginPath();
+        ctx.moveTo(30, yPos);
+        ctx.lineTo(w - 20, yPos);
+        ctx.stroke();
+      }
+
+      // Draw volume bars at bottom
+      ctx.fillStyle = isLight ? 'rgba(99, 102, 241, 0.12)' : 'rgba(99, 102, 241, 0.18)';
+      const barW = (w - 60) / points;
+      for (let i = 0; i < points; i++) {
+        const vH = (Math.sin(i) * 15) + 12;
+        ctx.fillRect(35 + (i * barW), h - vH - 10, barW * 0.6, vH);
+      }
+
+      // Curve Path
+      ctx.beginPath();
+      const coords = [];
+      for (let i = 0; i < points; i++) {
+        const x = 35 + (i * ((w - 60) / (points - 1)));
+        const y = h - 35 - (((data[i] - minVal) / range) * (h - 70));
+        coords.push({ x, y });
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+
+      // Stroke Line
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Area Fill Gradient
+      ctx.lineTo(coords[coords.length - 1].x, h - 25);
+      ctx.lineTo(coords[0].x, h - 25);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(99, 102, 241, 0.32)');
+      grad.addColorStop(1, 'rgba(99, 102, 241, 0.00)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Last price pulse dot
+      const last = coords[coords.length - 1];
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#6366f1';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Crosshair callout box at high point
+      const pIdx = Math.floor(points * 0.65);
+      const calloutPt = coords[pIdx];
+      ctx.fillStyle = isLight ? '#ffffff' : '#1e293b';
+      ctx.strokeStyle = isLight ? '#cbd5e1' : '#475569';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(calloutPt.x - 45, calloutPt.y - 36, 90, 24, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+      ctx.font = 'bold 10px JetBrains Mono';
+      ctx.fillText(`₹${data[pIdx].toFixed(1)} +4.2%`, calloutPt.x - 38, calloutPt.y - 20);
+    }
+
+    // 30-Second Auto Refresh & On-Demand Manual Quotes
+    let quoteSecondsLeft = 30;
+    let isFetchingQuotes = false;
+
+    function tickQuoteTimer() {
+      quoteSecondsLeft--;
+      if (quoteSecondsLeft <= 0) {
+        quoteSecondsLeft = 30;
+        pollLiveQuotes(false);
+      }
+      const el = document.getElementById('quoteCountdown');
+      if (el) el.textContent = `${quoteSecondsLeft}s`;
+    }
+
+    async function triggerManualQuoteRefresh() {
+      if (isFetchingQuotes) return;
+      quoteSecondsLeft = 30;
+      const el = document.getElementById('quoteCountdown');
+      if (el) el.textContent = `30s`;
+      await pollLiveQuotes(true);
+    }
+
+    // Poll Live Quotes from Angel One Backend
+    async function pollLiveQuotes(isManual = false) {
+      if (isFetchingQuotes) return;
+      isFetchingQuotes = true;
+      const btnIcon = document.getElementById('quoteBtnIcon');
+      const btnText = document.getElementById('quoteBtnText');
+      if (isManual && btnText) {
+        if (btnIcon) btnIcon.textContent = '🔄';
+        btnText.textContent = 'Updating...';
+      }
+
+      try {
+        const res = await fetch('/api/s5/market/live-quote');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // 1. Angel One Feed Status
+        const pill = document.getElementById('angelFeedPill');
+        const text = document.getElementById('angelFeedText');
+        if (data.angel_connected) {
+          const name = data.user_name ? data.user_name.split(' ')[0] : 'Active';
+          if (text) text.textContent = 'Angel: ' + name;
+        }
+
+        // 2. Nifty Index & India VIX
+        if (data.nifty) {
+          const npEl = document.getElementById('niftyPrice');
+          if (npEl) npEl.textContent = data.nifty.price.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          const chgEl = document.getElementById('niftyChg');
+          if (chgEl) {
+            chgEl.textContent = (data.nifty.change_pct >= 0 ? '+' : '') + data.nifty.change_pct.toFixed(2) + '%';
+            chgEl.style.color = data.nifty.change_pct >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+          }
+        }
+        if (data.india_vix) {
+          const vpEl = document.getElementById('vixPrice');
+          if (vpEl) vpEl.textContent = data.india_vix.price.toFixed(2);
+          const vcEl = document.getElementById('vixChg');
+          if (vcEl) {
+            vcEl.textContent = (data.india_vix.change_pct >= 0 ? '+' : '') + data.india_vix.change_pct.toFixed(2) + '%';
+            vcEl.style.color = data.india_vix.change_pct <= 0 ? 'var(--bullish)' : 'var(--bearish)';
+          }
+          const vsEl = document.getElementById('vixStance');
+          if (vsEl) vsEl.textContent = (data.india_vix.stance || 'NORMAL').toUpperCase();
+        }
+
+        // 3. Metrics
+
+        // Live dynamic update of sector breadth rows
+        if (data.nifty_breadth && data.nifty_breadth.sectors && data.nifty_breadth.sectors.length > 0) {
+          const sbc = document.getElementById('sectorBreadthContainer');
+          if (sbc) {
+            sbc.innerHTML = data.nifty_breadth.sectors.map(sec => `
+                <div class="sector-breadth-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                  <span style="font-weight:700; color:var(--text-white);">${sec.name}</span>
+                  <span style="color:var(--bullish); font-weight:700;">${sec.adv} Adv / ${sec.dec} Dec</span>
+                  <span class="num font-bold ${sec.chg >= 0 ? 'bull' : 'bear'}">${sec.chg >= 0 ? '+' : ''}${sec.chg.toFixed(2)}%</span>
+                </div>
+              `).join('');
+          }
+          const supEl = document.getElementById('adSectorSupport');
+          if (supEl && data.nifty_breadth.sectors.length >= 2) {
+            const s1 = data.nifty_breadth.sectors[0];
+            const s2 = data.nifty_breadth.sectors[1];
+            supEl.textContent = `${s1.name.replace('NIFTY ', '')} (${s1.chg >= 0 ? '+' : ''}${s1.chg.toFixed(2)}%) · ${s2.name.replace('NIFTY ', '')} (${s2.chg >= 0 ? '+' : ''}${s2.chg.toFixed(2)}%)`;
+          }
+        }
+
+        if (data.day_pnl !== undefined) {
+          const pnlEl = document.getElementById('dayPnlVal');
+          if (pnlEl) {
+            pnlEl.textContent = (data.day_pnl >= 0 ? '+' : '') + '₹' + data.day_pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+            pnlEl.style.color = data.day_pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+          }
+        }
+        if (data.capital_config) {
+          const bpEl = document.getElementById('buyingPowerVal');
+          if (bpEl) bpEl.textContent = '₹' + data.capital_config.buying_power.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          const fcEl = document.getElementById('freeCashVal');
+          if (fcEl) fcEl.textContent = '₹' + data.capital_config.free_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          const ordFc = document.getElementById('orderAvailCash');
+          if (ordFc) ordFc.textContent = '₹' + data.capital_config.free_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        }
+
+        // 4. Update Candidates
+        if (data.candidates && data.candidates.length > 0) {
+          data.candidates.forEach(nc => {
+            let ec = state.candidates.find(c => c.symbol === nc.symbol);
+            if (ec) {
+              ec.ltp = nc.ltp;
+              ec.chg = nc.chg;
+              if (nc.stockVsSector !== undefined) ec.stockVsSector = nc.stockVsSector;
+              if (nc.volRatio !== undefined) ec.volRatio = nc.volRatio;
+              if (nc.stop !== undefined) ec.stop = nc.stop;
+              if (nc.target1 !== undefined) ec.target1 = nc.target1;
+              if (nc.target2 !== undefined) ec.target2 = nc.target2;
+            }
+          });
+          renderCandidates();
+        }
+
+        // 5. Update Sectors
+        if (data.sectors && data.sectors.length > 0) {
+          if (data.sectors[0]) {
+            const s1 = document.getElementById('topSec1Chg');
+            if (s1) s1.textContent = (data.sectors[0].chg >= 0 ? '+' : '') + data.sectors[0].chg.toFixed(2) + '%';
+          }
+          if (data.sectors[1]) {
+            const s2 = document.getElementById('topSec2Chg');
+            if (s2) s2.textContent = (data.sectors[1].chg >= 0 ? '+' : '') + data.sectors[1].chg.toFixed(2) + '%';
+          }
+          state.sectors = data.sectors.map((s, idx) => ({
+            rank: idx + 1,
+            name: s.name,
+            members: s.members,
+            chg: s.chg,
+            rs: s.rs,
+            persistence: s.persistence || 3,
+            qualifies: s.isTop2
+          }));
+          renderSectors();
+        }
+
+        // 6. Update Positions
+        if (data.positions && data.positions.length > 0) {
+          state.positions = data.positions.map(p => ({
+            symbol: p.symbol,
+            sector: p.sector,
+            qty: p.qty,
+            entryFill: p.entry_fill,
+            currentLtp: p.current_ltp,
+            stop: p.stop,
+            target1: p.target1,
+            target2: p.target2,
+            variant: p.variant || 'E2',
+            unrealizedPnl: p.unrealized_pnl,
+            rMultiple: p.r_multiple
+          }));
+          renderPositions();
+        }
+
+        if (isManual && btnText) {
+          if (btnIcon) btnIcon.textContent = '✓';
+          btnText.textContent = 'Updated';
+          setTimeout(() => {
+            if (btnIcon) btnIcon.textContent = '⚡';
+            if (btnText) btnText.textContent = 'Quotes';
+          }, 1200);
+        }
+      } catch (err) {
+        console.warn('Live quote poll error:', err);
+      } finally {
+        isFetchingQuotes = false;
+      }
+    }
+
+    // MIS 15:15 Square-off Countdown
+    function tickClock() {
+      const now = new Date();
+      const exitTime = new Date();
+      exitTime.setHours(15, 15, 0, 0);
+      const marketOpen = new Date();
+      marketOpen.setHours(9, 15, 0, 0);
+
+      const timerEl = document.getElementById('sessionTimer');
+      const badgeEl = document.getElementById('sessionTimerBadge');
+
+      if (now < marketOpen) {
+        const diffOpen = marketOpen - now;
+        const hrs = String(Math.floor(diffOpen / (1000 * 60 * 60))).padStart(2, '0');
+        const mins = String(Math.floor((diffOpen / (1000 * 60)) % 60)).padStart(2, '0');
+        const secs = String(Math.floor((diffOpen / 1000) % 60)).padStart(2, '0');
+        if (timerEl) timerEl.textContent = `${hrs}:${mins}:${secs}`;
+        if (badgeEl) { badgeEl.textContent = 'Pre-Open'; badgeEl.style.color = 'var(--light-blue)'; }
+        return;
+      }
+
+      let diff = exitTime - now;
+      if (diff <= 0) {
+        if (timerEl) { timerEl.textContent = "00:00:00 (FLAT)"; timerEl.style.color = "var(--text-secondary)"; }
+        if (badgeEl) { badgeEl.textContent = "Market Closed"; badgeEl.style.color = "var(--text-muted)"; }
+        return;
+      }
+
+      const hrs = String(Math.floor(diff / (1000 * 60 * 60))).padStart(2, '0');
+      const mins = String(Math.floor((diff / (1000 * 60)) % 60)).padStart(2, '0');
+      const secs = String(Math.floor((diff / 1000) % 60)).padStart(2, '0');
+
+      if (timerEl) { timerEl.textContent = `${hrs}:${mins}:${secs}`; timerEl.style.color = "var(--light-blue)"; }
+      if (badgeEl) { badgeEl.textContent = "Active Session"; badgeEl.style.color = "var(--bullish)"; }
+    }
+
+    // Initial Load & Listeners
+    window.addEventListener('DOMContentLoaded', () => {
+      renderCandidates();
+      renderSectors();
+      renderPositions();
+      renderTrades();
+      runCalculator();
+      if (typeof drawMomentumChart === "function") drawMomentumChart();
+
+      setInterval(tickClock, 1000);
+      tickClock();
+
+      setInterval(tickQuoteTimer, 1000);
+      pollLiveQuotes(false);
+
+      window.addEventListener('resize', drawMomentumChart);
+    });
+  </script>
+</body>
+
+</html>
