@@ -1,0 +1,61 @@
+{
+  "_comment": "Strategy 5 parameters - copied from the developer spec, section 2. No magic numbers in code: change values here only.",
+
+  "active_profile": "small",
+  "mode": "PAPER",
+
+  "common": {
+    "universe": "NIFTY100",
+    "ema": 55, "sma": 200, "atr": 14, "vol_days": 20, "high_days": 20, "mkt_sma": 50,
+    "session_open": "09:15", "session_close": "15:30",
+    "scan_first_close": "09:45", "scan_last_close": "11:30", "time_exit": "15:15",
+    "nifty_min_chg": -0.0035,
+    "gap_min": -0.012, "gap_max": 0.03,
+    "min_sector_members": 4, "top_sectors": 2, "sector_persist_candles": 3, "stock_vs_sector_min": 0.003,
+    "vol_ratio_min": 1.5, "range_pos_min": 0.75, "max_move_atr": 1.0,
+    "stop_atr": 0.75, "r_max": 0.016, "resist_buffer": 0.998, "tick": 0.05,
+    "entry_limit_pad": 0.0015, "entry_wait_s": 10, "slip_model": 0.0002, "min_candles_per_day": 70,
+    "feed_stale_warn_s": 15, "feed_stale_flatten_s": 60, "reconcile_s": 30, "brokerage_per_order": 20,
+    "min_traded_value_20d": 500000000,
+    "candle_minutes": 5,
+    "candle_close_grace_s": 2
+  },
+
+  "profiles": {
+    "main": {
+      "capital": 1500000, "trend": "either", "risk_pct_A": 0.0025, "risk_pct_B": 0.00125, "r_min": 0.005,
+      "room_min_r": 1.0, "max_open": 3, "max_entries_day": 5, "max_per_sector": 2, "max_pos_value": 0.40, "gross_cap": 1.0,
+      "day_stop": -0.01, "week_stop": -0.025, "account_stop": -0.06, "exits": ["E1", "E2", "E3", "E4"], "exit_variant": "E2"
+    },
+    "small": {
+      "_comment": "Spec 'small25k' rules, run with YOUR capital of Rs 15,000. Buying power is capped by gross_cap (2.4x), NOT by the broker's 5x MIS leverage (spec section 9).",
+      "capital": 15000, "trend": "both", "risk_pct_A": 0.015, "risk_pct_B": 0.015, "r_min": 0.008,
+      "room_min_r": 1.5, "max_open": 1, "max_entries_day": 2, "max_per_sector": 1, "max_pos_value": 2.4, "gross_cap": 2.4,
+      "day_stop": -0.03, "week_stop": -0.06, "account_stop": -0.15, "exits": ["E2"], "exit_variant": "E2"
+    }
+  },
+
+  "costs": {
+    "brokerage_cap": 20, "brokerage_pct": 0.001, "stt_sell": 0.00025, "stamp_buy": 0.00003,
+    "exchange": 0.0000297, "sebi": 0.000001, "gst": 0.18
+  },
+
+  "proof_gate": {
+    "passed": false,
+    "passed_on": null,
+    "note": "Status: unproven. No backtest results yet (spec section 11). LIVE order placement stays locked until this is true."
+  },
+
+  "files": {
+    "sector_map": "sector_map.csv",
+    "event_blocks": "event_blocks.csv",
+    "surveillance_exclude": "surveillance_exclude.txt",
+    "nifty100_url": "https://www.niftyindices.com/IndexConstituent/ind_nifty100list.csv",
+    "scrip_master_url": "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+  },
+
+  "index_tokens": {
+    "NIFTY": "99926000",
+    "INDIAVIX": "99926017"
+  }
+}

@@ -11,3 +11,4 @@ restore_*.py
 logs/
 node_modules/
 __pycache__/
+data/

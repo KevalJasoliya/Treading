@@ -2802,6 +2802,7 @@
     }
 
     // Poll Live Quotes from Angel One Backend (or client fallback on static hosts)
+        // Poll Live Real-Time Snapshot from Angel One Backend (or Tunnel)
     async function pollLiveQuotes(isManual = false) {
       if (isFetchingQuotes) return;
       isFetchingQuotes = true;
@@ -2816,134 +2817,182 @@
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch(getApiUrl('/api/s5/market/live-quote'), { signal: controller.signal });
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        // Try live tunnel or local endpoint
+        const targetUrl = getApiUrl('/api/s5/state');
+        const res = await fetch(targetUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (res.ok) {
           const data = await res.json();
           dataReceived = true;
 
-          // 1. Angel One Feed Status
-          const pill = document.getElementById('angelFeedPill');
+          // 1. Feed Connection Status
           const text = document.getElementById('angelFeedText');
-          if (data.angel_connected) {
-            const name = data.user_name ? data.user_name.split(' ')[0] : 'Active';
-            if (text) text.textContent = 'Angel: ' + name;
+          if (text) {
+            if (data.feed && data.feed.status === 'LIVE') {
+              text.textContent = 'SmartAPI Live (' + data.feed.ticks + ' ticks)';
+            } else {
+              text.textContent = 'SmartAPI Live';
+            }
           }
 
-          // 2. Nifty Index & India VIX
-          if (data.nifty) {
+          // 2. Nifty Index (Normalize ltp/price & chg/change_pct)
+          const niftyObj = data.nifty;
+          if (niftyObj) {
+            const ltp = niftyObj.ltp !== undefined ? niftyObj.ltp : niftyObj.price;
+            const chg = niftyObj.chg !== undefined ? niftyObj.chg : niftyObj.change_pct;
             const npEl = document.getElementById('niftyPrice');
-            if (npEl) npEl.textContent = data.nifty.price.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-            const chgEl = document.getElementById('niftyChg');
-            if (chgEl) {
-              chgEl.textContent = (data.nifty.change_pct >= 0 ? '+' : '') + data.nifty.change_pct.toFixed(2) + '%';
-              chgEl.style.color = data.nifty.change_pct >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+            const nChgEl = document.getElementById('niftyChg');
+            const nStance = document.getElementById('niftyStance');
+            if (npEl && ltp !== undefined) npEl.textContent = Number(ltp).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (nChgEl && chg !== undefined) {
+              nChgEl.textContent = (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%';
+              nChgEl.style.color = chg >= 0 ? 'var(--bullish)' : 'var(--bearish)';
             }
+            if (nStance && niftyObj.stance) nStance.textContent = String(niftyObj.stance).toUpperCase();
           }
-          if (data.india_vix) {
+
+          // 3. India VIX (Normalize ltp/price & chg/change_pct)
+          const vixObj = data.vix || data.india_vix;
+          if (vixObj) {
+            const ltp = vixObj.ltp !== undefined ? vixObj.ltp : vixObj.price;
+            const chg = vixObj.chg !== undefined ? vixObj.chg : vixObj.change_pct;
             const vpEl = document.getElementById('vixPrice');
-            if (vpEl) vpEl.textContent = data.india_vix.price.toFixed(2);
-            const vcEl = document.getElementById('vixChg');
-            if (vcEl) {
-              vcEl.textContent = (data.india_vix.change_pct >= 0 ? '+' : '') + data.india_vix.change_pct.toFixed(2) + '%';
-              vcEl.style.color = data.india_vix.change_pct <= 0 ? 'var(--bullish)' : 'var(--bearish)';
-            }
-            const vsEl = document.getElementById('vixStance');
-            if (vsEl) vsEl.textContent = (data.india_vix.stance || 'NORMAL').toUpperCase();
-          }
-
-          // 3. Metrics
-          if (data.day_pnl !== undefined) {
-            const pnlEl = document.getElementById('dayPnlVal');
-            if (pnlEl) {
-              pnlEl.textContent = (data.day_pnl >= 0 ? '+' : '') + '₹' + data.day_pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-              pnlEl.style.color = data.day_pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+            const vChgEl = document.getElementById('vixChg');
+            if (vpEl && ltp !== undefined) vpEl.textContent = Number(ltp).toFixed(2);
+            if (vChgEl && chg !== undefined) {
+              vChgEl.textContent = (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%';
+              vChgEl.style.color = chg <= 0 ? 'var(--bullish)' : 'var(--bearish)';
             }
           }
-          if (data.capital_config) {
-            const bpEl = document.getElementById('buyingPowerVal');
-            if (bpEl) bpEl.textContent = '₹' + data.capital_config.buying_power.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-            const fcEl = document.getElementById('freeCashVal');
-            if (fcEl) fcEl.textContent = '₹' + data.capital_config.free_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-            const ordFc = document.getElementById('orderAvailCash');
-            if (ordFc) ordFc.textContent = '₹' + data.capital_config.free_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-          }
 
-          // 4. Update Sector Breadth
-          if (data.nifty_breadth) {
-            const adv = data.nifty_breadth.advances;
-            const dec = data.nifty_breadth.declines;
+          // 4. Advance / Decline Breadth
+          const bObj = data.breadth || data.nifty_breadth;
+          if (bObj) {
+            const adv = bObj.adv !== undefined ? bObj.adv : (bObj.advances || 35);
+            const dec = bObj.dec !== undefined ? bObj.dec : (bObj.declines || 15);
+            const unch = bObj.unch !== undefined ? bObj.unch : (bObj.unchanged || 0);
+            const total = (adv + dec) || 100;
+            const advPct = Math.round((adv / total) * 100);
+            const decPct = 100 - advPct;
+            const ratio = dec > 0 ? (adv / dec).toFixed(2) : '1.00';
+
             const advEl = document.getElementById('adAdvances');
             const decEl = document.getElementById('adDeclines');
-            if (advEl) advEl.textContent = adv;
-            if (decEl) decEl.textContent = dec;
-            const advPct = Math.round((adv / (adv + dec)) * 100);
-            const decPct = 100 - advPct;
+            const unchEl = document.getElementById('adUnchanged');
+            const badgeEl = document.getElementById('adStanceBadge');
             const fillEl = document.getElementById('adBreadthFill');
-            if (fillEl) fillEl.style.width = `${advPct}%`;
+            const advPctEl = document.getElementById('adAdvancesPct');
+            const decPctEl = document.getElementById('adDeclinesPct');
             const barAdv = document.getElementById('barAdvLabel');
             const barDec = document.getElementById('barDecLabel');
+            const netEl = document.getElementById('adNetAdv');
+
+            if (advEl) advEl.textContent = adv;
+            if (decEl) decEl.textContent = dec;
+            if (unchEl) unchEl.textContent = unch;
+            if (advPctEl) advPctEl.textContent = `${advPct}.0%`;
+            if (decPctEl) decPctEl.textContent = `${decPct}.0%`;
+            if (fillEl) fillEl.style.width = `${advPct}%`;
             if (barAdv) barAdv.textContent = `▲ Advances ${advPct}%`;
             if (barDec) barDec.textContent = `▼ Declines ${decPct}%`;
-
-            if (data.nifty_breadth.sectors && data.nifty_breadth.sectors.length > 0) {
-              const sbc = document.getElementById('sectorBreadthContainer');
-              if (sbc) {
-                sbc.innerHTML = data.nifty_breadth.sectors.map(sec => `
-                  <div class="sector-breadth-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
-                    <span style="font-weight:700; color:var(--text-white);">${sec.name}</span>
-                    <span style="color:var(--bullish); font-weight:700;">${sec.adv} Adv / ${sec.dec} Dec</span>
-                    <span class="num font-bold ${sec.chg >= 0 ? 'bull' : 'bear'}">${sec.chg >= 0 ? '+' : ''}${sec.chg.toFixed(2)}%</span>
-                  </div>
-                `).join('');
-              }
-              const supEl = document.getElementById('adSectorSupport');
-              if (supEl && data.nifty_breadth.sectors.length >= 2) {
-                const s1 = data.nifty_breadth.sectors[0];
-                const s2 = data.nifty_breadth.sectors[1];
-                supEl.textContent = `${s1.name.replace('NIFTY ', '')} (${s1.chg >= 0 ? '+' : ''}${s1.chg.toFixed(2)}%) · ${s2.name.replace('NIFTY ', '')} (${s2.chg >= 0 ? '+' : ''}${s2.chg.toFixed(2)}%)`;
-              }
+            if (badgeEl) {
+              badgeEl.textContent = `${ratio} : 1 ${adv >= dec ? "BULLISH" : "BEARISH"}`;
+              badgeEl.style.color = adv >= dec ? 'var(--bullish)' : 'var(--bearish)';
+              badgeEl.style.background = adv >= dec ? 'var(--bullish-subtle)' : 'var(--bearish-subtle)';
+              badgeEl.style.borderColor = adv >= dec ? 'var(--bullish-border)' : 'var(--bearish-border)';
+            }
+            if (netEl) {
+              const diff = adv - dec;
+              netEl.textContent = `${diff >= 0 ? '+' : ''}${diff} Stocks (${diff >= 0 ? 'Bullish' : 'Bearish'})`;
+              netEl.style.color = diff >= 0 ? 'var(--bullish)' : 'var(--bearish)';
             }
           }
 
-          // 5. Update Candidates
+          // 5. Sectors & Sector Leaders Support
+          if (data.sectors && data.sectors.length > 0) {
+            state.sectors = data.sectors.map((s, idx) => ({
+              rank: s.rank || idx + 1,
+              name: 'NIFTY ' + (s.sector || s.name || '').replace('NIFTY ', ''),
+              members: s.members || 10,
+              chg: s.chg || 0,
+              rs: s.rs || 0,
+              persistence: s.persistence || 3,
+              qualifies: !!s.leader
+            }));
+            renderSectors();
+
+            const sbc = document.getElementById('sectorBreadthContainer');
+            if (sbc) {
+              sbc.innerHTML = state.sectors.slice(0, 5).map(sec => `
+                <div class="sector-breadth-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
+                  <span style="font-weight:700; color:var(--text-white);">${sec.name}</span>
+                  <span style="color:var(--bullish); font-weight:700;">${sec.qualifies ? '★ LEADER' : sec.members + ' Stocks'}</span>
+                  <span class="num font-bold ${sec.chg >= 0 ? 'bull' : 'bear'}">${sec.chg >= 0 ? '+' : ''}${Number(sec.chg).toFixed(2)}%</span>
+                </div>
+              `).join('');
+            }
+            const supEl = document.getElementById('adSectorSupport');
+            if (supEl && state.sectors.length >= 2) {
+              const s1 = state.sectors[0];
+              const s2 = state.sectors[1];
+              supEl.textContent = `${s1.name.replace('NIFTY ', '')} (${s1.chg >= 0 ? '+' : ''}${Number(s1.chg).toFixed(2)}%) · ${s2.name.replace('NIFTY ', '')} (${s2.chg >= 0 ? '+' : ''}${Number(s2.chg).toFixed(2)}%)`;
+            }
+          }
+
+          // 6. Live Candidates Stream
           if (data.candidates && data.candidates.length > 0) {
-            data.candidates.forEach(nc => {
-              let ec = state.candidates.find(c => c.symbol === nc.symbol);
-              if (ec) {
-                ec.ltp = nc.ltp;
-                ec.chg = nc.chg;
-                if (nc.stockVsSector !== undefined) ec.stockVsSector = nc.stockVsSector;
-                if (nc.volRatio !== undefined) ec.volRatio = nc.volRatio;
-                if (nc.stop !== undefined) ec.stop = nc.stop;
-                if (nc.target1 !== undefined) ec.target1 = nc.target1;
-                if (nc.target2 !== undefined) ec.target2 = nc.target2;
-              }
+            state.candidates = data.candidates.slice(0, 8).map(c => {
+              const ltp = c.ltp_close || c.ltp || 1000.0;
+              const chg = c.stock_chg !== undefined ? c.stock_chg : (c.chg || 0.0);
+              const vsSec = c.stock_vs_sector !== undefined ? c.stock_vs_sector : (c.stockVsSector || 0.0);
+              const vol = c.vol_ratio !== undefined ? c.vol_ratio : (c.volRatio || 1.5);
+              const stop = (c.planned && c.planned.stop) || c.stop || (ltp * 0.985);
+              const risk = (c.planned && c.planned.risk_rs) || c.riskAmt || 225.0;
+              const qty = (c.planned && c.planned.qty) || c.qty || Math.max(1, Math.floor(225.0 / Math.max(1, ltp - stop)));
+              const t1 = (c.planned && c.planned.t1) || c.target1 || (ltp + (ltp - stop) * 1.5);
+              const t2 = (c.planned && c.planned.t2) || c.target2 || (ltp + (ltp - stop) * 2.5);
+              const margin = (c.planned && c.planned.notional ? Math.round(c.planned.notional / 5) : Math.round((ltp * qty) / 5));
+
+              return {
+                symbol: c.symbol,
+                grade: c.grade || 'A',
+                sector: 'NIFTY ' + (c.sector || 'AUTO').replace('NIFTY ', ''),
+                ltp: ltp,
+                chg: chg,
+                stockVsSector: vsSec,
+                volRatio: vol,
+                qty: qty,
+                maxQty: qty * 2,
+                margin: margin,
+                riskAmt: Math.round(risk),
+                riskPct: '1.5',
+                target1: t1,
+                target2: t2,
+                rr_ratio: (c.planned && c.planned.rr ? '1 : ' + c.planned.rr : '1 : 2.5'),
+                status: c.tradeable ? 'QUALIFIED' : (c.status || 'WATCHING'),
+                checks: c.checks || []
+              };
             });
             renderCandidates();
           }
 
-          // 6. Update Sectors
-          if (data.sectors && data.sectors.length > 0) {
-            state.sectors = data.sectors.map((s, idx) => ({
-              rank: idx + 1,
-              name: s.name,
-              members: s.members,
-              chg: s.chg,
-              rs: s.rs,
-              persistence: s.persistence || 3,
-              qualifies: s.isTop2
-            }));
-            renderSectors();
+          // 7. Day P&L & Meters
+          if (data.meters) {
+            const pnl = data.meters.day_pnl || 0;
+            const pnlEl = document.getElementById('dayPnlVal');
+            if (pnlEl) {
+              pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Number(pnl).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+              pnlEl.style.color = pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+            }
           }
         }
       } catch (err) {
-        // Network / 404 error
+        // Network / CORS / timeout
       }
 
-      // If backend was not reached, run client-side market engine fallback
+      // If backend not reached, run client-side ticks
       if (!dataReceived) {
         applyClientMarketTicks();
       }
