@@ -3089,12 +3089,14 @@
           if (data.sectors && data.sectors.length > 0) {
             state.sectors = data.sectors.map((s, idx) => ({
               rank: s.rank || idx + 1,
-              name: 'NIFTY ' + (s.sector || s.name || '').replace('NIFTY ', ''),
+              name: (s.name || 'NIFTY ' + (s.sector || '')).toUpperCase(),
               members: s.members || 10,
               chg: s.chg || 0,
               rs: s.rs || 0,
               persistence: s.persistence || 3,
-              qualifies: !!s.leader
+              qualifies: !!s.leader,
+              adv: s.adv,
+              dec: s.dec
             }));
             renderSectors();
 
@@ -3103,7 +3105,7 @@
               sbc.innerHTML = state.sectors.slice(0, 5).map(sec => `
                 <div class="sector-breadth-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:var(--bg-elevated); font-size:12px;">
                   <span style="font-weight:700; color:var(--text-white);">${sec.name}</span>
-                  <span style="color:var(--bullish); font-weight:700;">${sec.qualifies ? '★ LEADER' : sec.members + ' Stocks'}</span>
+                  <span style="color:var(--bullish); font-weight:700;">${sec.adv !== undefined ? `${sec.adv} Adv / ${sec.dec} Dec` : (sec.qualifies ? '★ LEADER' : sec.members + ' Stocks')}</span>
                   <span class="num font-bold ${sec.chg >= 0 ? 'bull' : 'bear'}">${sec.chg >= 0 ? '+' : ''}${Number(sec.chg).toFixed(2)}%</span>
                 </div>
               `).join('');

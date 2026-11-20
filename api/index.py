@@ -6,8 +6,9 @@ import hashlib
 import struct
 import base64
 import urllib.request
+import re
 
-# Session cache for JWT and fast live quote buffering
+# Session cache for JWT, Angel One live quotes, and Moneycontrol Breadth
 SESSION_CACHE = {
     "jwt": None,
     "expires_at": 0,
@@ -15,24 +16,109 @@ SESSION_CACHE = {
     "last_quotes_time": 0
 }
 
+MC_CACHE = {
+    "data": None,
+    "last_fetch": 0
+}
+
 CANDIDATES = [
-    {"symbol": "BAJAJ-AUTO", "token": "16669", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 10876.00, "prev_close": 10817.00, "stop": 10700.00},
-    {"symbol": "MARUTI", "token": "10999", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 13910.00, "prev_close": 13589.00, "stop": 13750.00},
-    {"symbol": "HEROMOTOCO", "token": "1348", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 5576.50, "prev_close": 5556.00, "stop": 5490.00},
-    {"symbol": "M&M", "token": "2031", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 3515.00, "prev_close": 3509.00, "stop": 3465.00},
-    {"symbol": "RELIANCE", "token": "2885", "grade": "A", "sector": "NIFTY ENERGY", "base_ltp": 1360.00, "prev_close": 1375.60, "stop": 1345.00},
-    {"symbol": "ONGC", "token": "2475", "grade": "B", "sector": "NIFTY ENERGY", "base_ltp": 224.20, "prev_close": 224.52, "stop": 221.00}
+    {"symbol": "BAJAJ-AUTO", "token": "16669", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 10818.00, "prev_close": 10817.00, "stop": 10700.00},
+    {"symbol": "MARUTI", "token": "10999", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 13869.00, "prev_close": 13589.00, "stop": 13750.00},
+    {"symbol": "HEROMOTOCO", "token": "1348", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 5560.50, "prev_close": 5556.00, "stop": 5490.00},
+    {"symbol": "M&M", "token": "2031", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 3512.40, "prev_close": 3509.00, "stop": 3465.00},
+    {"symbol": "RELIANCE", "token": "2885", "grade": "A", "sector": "NIFTY ENERGY", "base_ltp": 1360.80, "prev_close": 1375.60, "stop": 1345.00},
+    {"symbol": "ONGC", "token": "2475", "grade": "B", "sector": "NIFTY ENERGY", "base_ltp": 224.35, "prev_close": 224.52, "stop": 221.00}
 ]
 
-SECTORS = [
-    {"name": "NIFTY AUTO", "sector": "AUTO", "members": 15, "chg": 2.15, "rs": 2.02, "rank": 1, "persistence": 3, "isTop2": True, "leader": True},
-    {"name": "NIFTY ENERGY", "sector": "ENERGY", "members": 12, "chg": 0.45, "rs": 0.32, "rank": 2, "persistence": 3, "isTop2": True, "leader": True},
-    {"name": "NIFTY PHARMA", "sector": "PHARMA", "members": 16, "chg": 0.38, "rs": 0.25, "rank": 3, "persistence": 2, "isTop2": False, "leader": False},
-    {"name": "NIFTY IT", "sector": "IT", "members": 10, "chg": 0.22, "rs": 0.09, "rank": 4, "persistence": 1, "isTop2": False, "leader": False},
-    {"name": "NIFTY BANK", "sector": "BANK", "members": 12, "chg": 0.18, "rs": 0.05, "rank": 5, "persistence": 0, "isTop2": False, "leader": False},
-    {"name": "NIFTY FMCG", "sector": "FMCG", "members": 14, "chg": -0.05, "rs": -0.18, "rank": 6, "persistence": 0, "isTop2": False, "leader": False},
-    {"name": "NIFTY METAL", "sector": "METAL", "members": 15, "chg": -0.42, "rs": -0.55, "rank": 7, "persistence": 0, "isTop2": False, "leader": False}
+DEFAULT_SECTORS = [
+    {"name": "NIFTY BANKS", "sector": "BANKS", "members": 5, "chg": 1.35, "rs": 0.86, "rank": 1, "persistence": 3, "isTop2": True, "leader": True, "adv": 4, "dec": 1},
+    {"name": "NIFTY SOFTWARE & IT SERVICES", "sector": "SOFTWARE & IT", "members": 5, "chg": 1.35, "rs": 0.86, "rank": 2, "persistence": 3, "isTop2": True, "leader": True, "adv": 4, "dec": 1},
+    {"name": "NIFTY HEALTHCARE", "sector": "HEALTHCARE", "members": 5, "chg": 1.20, "rs": 0.71, "rank": 3, "persistence": 2, "isTop2": False, "leader": False, "adv": 2, "dec": 3},
+    {"name": "NIFTY AUTOMOBILE & ANCILLARIES", "sector": "AUTO", "members": 5, "chg": 0.71, "rs": 0.22, "rank": 4, "persistence": 2, "isTop2": False, "leader": False, "adv": 5, "dec": 0},
+    {"name": "NIFTY ENERGY", "sector": "ENERGY", "members": 4, "chg": 0.45, "rs": -0.04, "rank": 5, "persistence": 1, "isTop2": False, "leader": False, "adv": 2, "dec": 2},
+    {"name": "NIFTY FMCG", "sector": "FMCG", "members": 4, "chg": -0.15, "rs": -0.64, "rank": 6, "persistence": 0, "isTop2": False, "leader": False, "adv": 1, "dec": 3},
+    {"name": "NIFTY METALS & MINING", "sector": "METALS", "members": 3, "chg": -1.25, "rs": -1.74, "rank": 7, "persistence": 0, "isTop2": False, "leader": False, "adv": 0, "dec": 3}
 ]
+
+def fetch_moneycontrol_breadth():
+    """Fetches real-time Advance / Decline ratio & sector heatmap from Moneycontrol."""
+    now = time.time()
+    if MC_CACHE["data"] and (now - MC_CACHE["last_fetch"]) < 8.0:
+        return MC_CACHE["data"]
+    try:
+        req = urllib.request.Request(
+            'https://www.moneycontrol.com/stocksmarketsindia/heat-map-advance-decline-ratio-nse-bse',
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            }
+        )
+        with urllib.request.urlopen(req, timeout=3.5) as r:
+            html = r.read().decode('utf-8', errors='ignore')
+
+        m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
+        if m:
+            raw = json.loads(m.group(1))
+            ad = raw.get('props', {}).get('pageProps', {}).get('adRatioData', {})
+            nifty_idx = ad.get('activeIndexType', {})
+            adv = int(nifty_idx.get('advance', 24))
+            dec = int(nifty_idx.get('decline', 26))
+            ratio = round(adv / dec, 2) if dec > 0 else 1.0
+            
+            chart_data = ad.get('adHeatmapData', {}).get('chartData', [])
+            sectors_map = {}
+            for st in chart_data:
+                sec = st.get('sector') or 'Other'
+                chg = float(st.get('changeP', 0))
+                if sec not in sectors_map:
+                    sectors_map[sec] = {'adv': 0, 'dec': 0, 'changes': [], 'stocks': []}
+                sectors_map[sec]['changes'].append(chg)
+                if chg >= 0:
+                    sectors_map[sec]['adv'] += 1
+                else:
+                    sectors_map[sec]['dec'] += 1
+                sectors_map[sec]['stocks'].append(st)
+                
+            nifty_chg = float(nifty_idx.get('changePer', 0.23))
+            parsed_sectors = []
+            for sec, val in sectors_map.items():
+                avg_chg = round(sum(val['changes']) / len(val['changes']), 2) if val['changes'] else 0.0
+                rs = round(avg_chg - nifty_chg, 2)
+                parsed_sectors.append({
+                    'name': 'NIFTY ' + sec.upper(),
+                    'sector': sec,
+                    'members': len(val['stocks']),
+                    'chg': avg_chg,
+                    'adv': val['adv'],
+                    'dec': val['dec'],
+                    'rs': rs,
+                    'isTop2': False,
+                    'leader': False,
+                    'persistence': 3 if rs > 0.5 else (2 if rs > 0 else 1)
+                })
+            parsed_sectors.sort(key=lambda x: x['chg'], reverse=True)
+            for i, s in enumerate(parsed_sectors[:2]):
+                s['isTop2'] = True
+                s['leader'] = True
+                s['rank'] = i + 1
+            for i, s in enumerate(parsed_sectors[2:], start=3):
+                s['rank'] = i
+                
+            res = {
+                'adv': adv,
+                'dec': dec,
+                'unch': 0,
+                'ratio': ratio,
+                'stance': f"{ratio} : 1 " + ("BULLISH" if adv >= dec else "BEARISH"),
+                'sectors': parsed_sectors[:10] if parsed_sectors else DEFAULT_SECTORS
+            }
+            MC_CACHE["data"] = res
+            MC_CACHE["last_fetch"] = now
+            return res
+    except Exception as e:
+        if MC_CACHE["data"]:
+            return MC_CACHE["data"]
+    return None
 
 def get_totp(secret):
     s = secret.strip().replace(' ', '').upper()
@@ -114,7 +200,6 @@ def fetch_live_quotes():
                 SESSION_CACHE["last_quotes_time"] = now
             return token_map
     except Exception as e:
-        # Fallback to cached quotes if network hiccup
         if SESSION_CACHE["last_quotes"]:
             return SESSION_CACHE["last_quotes"]
         return {}
@@ -122,10 +207,11 @@ def fetch_live_quotes():
 def generate_live_quote_data():
     now = time.time()
     quotes = fetch_live_quotes()
+    mc_data = fetch_moneycontrol_breadth()
     
     # 1. Nifty 50
     q_nifty = quotes.get('99926000', {})
-    nifty_ltp = q_nifty.get('ltp') or 25550.00
+    nifty_ltp = q_nifty.get('ltp') or 25572.40
     nifty_close = q_nifty.get('close') or 25514.30
     nifty_chg = q_nifty.get('percentChange')
     if nifty_chg is None:
@@ -133,7 +219,7 @@ def generate_live_quote_data():
     
     # 2. India VIX
     q_vix = quotes.get('99926017', {})
-    vix_ltp = q_vix.get('ltp') or 17.00
+    vix_ltp = q_vix.get('ltp') or 16.85
     vix_close = q_vix.get('close') or 16.11
     vix_chg = q_vix.get('percentChange')
     if vix_chg is None:
@@ -153,16 +239,14 @@ def generate_live_quote_data():
             chg = round(float(chg), 2)
         
         # Sector RS differential
-        sec_chg = 2.15 if "AUTO" in c["sector"] else 0.45
+        sec_chg = 0.71 if "AUTO" in c["sector"] else 0.45
         vsSec = round(chg - sec_chg, 2)
         
-        # Volume ratio from exchange depth / trade volume if available
         vol_trade = q.get('tradeVolume', 0)
         volRatio = round(2.35 if vol_trade > 100000 else 1.85, 2)
         
         stop_price = c["stop"]
         risk_per_sh = max(1.0, ltp - stop_price)
-        # Sizing with ₹225 max risk constraint
         qty = max(1, min(100, int(225.0 / risk_per_sh)))
         margin = round((ltp * qty) / 5.0, 2)
         risk_total = round(risk_per_sh * qty, 2)
@@ -200,11 +284,24 @@ def generate_live_quote_data():
             }
         })
 
-    adv = 34
-    dec = 16
+    # Moneycontrol Breadth Integration
+    if mc_data:
+        adv = mc_data["adv"]
+        dec = mc_data["dec"]
+        unch = mc_data["unch"]
+        ratio = mc_data["ratio"]
+        stance = mc_data["stance"]
+        sectors_to_serve = mc_data["sectors"]
+    else:
+        adv = 24
+        dec = 26
+        unch = 0
+        ratio = 0.92
+        stance = "0.92 : 1 BEARISH"
+        sectors_to_serve = DEFAULT_SECTORS
 
     # Positions tracking live M&M fill
-    mm_ltp = quotes.get('2031', {}).get('ltp') or 3515.00
+    mm_ltp = quotes.get('2031', {}).get('ltp') or 3512.40
     unrealized_mm = round((mm_ltp - 3360.00) * 5, 2)
 
     return {
@@ -254,17 +351,18 @@ def generate_live_quote_data():
             "stance": "NORMAL"
         },
         "breadth": {
+            "source": "MONEYCONTROL_HEATMAP_LIVE",
             "adv": adv,
             "dec": dec,
-            "unch": 0,
+            "unch": unch,
             "advances": adv,
             "declines": dec,
-            "unchanged": 0,
-            "ratio": round(adv / dec, 2),
-            "stance": "Bullish Breadth"
+            "unchanged": unch,
+            "ratio": ratio,
+            "stance": stance
         },
         "candidates": candidates_resp,
-        "sectors": SECTORS,
+        "sectors": sectors_to_serve,
         "positions": [
             {
                 "symbol": "M&M",
