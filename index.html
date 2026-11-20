@@ -2617,11 +2617,12 @@
     // Mode Switcher (Paper / Live)
     function setMode(m) {
       state.mode = m;
-      document.querySelectorAll('.mode-capsule button').forEach(b => {
+      document.querySelectorAll('.mode-capsule button, .mode-btn').forEach(b => {
         b.classList.remove('active');
-        if (b.textContent === m) b.classList.add('active');
+        if (b.textContent.trim().toUpperCase() === m.toUpperCase()) b.classList.add('active');
       });
     }
+    const setTradingMode = setMode;
 
     // Exit Position
     function exitPosition(idx) {
@@ -2636,15 +2637,18 @@
       state.selectedSymbol = sym;
       const c = state.candidates.find(item => item.symbol === sym);
       if (c) {
-        document.getElementById('chartSymbolName').textContent = `${c.symbol} · ${c.sector}`;
-        document.getElementById('chartPriceVal').textContent = `₹${c.ltp.toFixed(2)}`;
+        const nameEl = document.getElementById('chartSymbolName');
+        if (nameEl) nameEl.textContent = `${c.symbol} · ${c.sector}`;
+        const pEl = document.getElementById('chartPriceVal');
+        if (pEl) pEl.textContent = `₹${c.ltp.toFixed(2)}`;
         const chgEl = document.getElementById('chartChgBadge');
         if (chgEl) {
           chgEl.textContent = (c.chg >= 0 ? '+' : '') + c.chg.toFixed(2) + '%';
           chgEl.style.color = c.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)';
           chgEl.style.background = c.chg >= 0 ? 'var(--bullish-subtle)' : 'var(--bearish-subtle)';
         }
-        document.getElementById('calcStock').value = sym;
+        const calcStockEl = document.getElementById('calcStock');
+        if (calcStockEl) calcStockEl.value = sym;
         applyStockToCalc();
         if (typeof drawMomentumChart === "function") drawMomentumChart();
       }
@@ -2654,51 +2658,67 @@
     function setTimeframe(tf) {
       document.querySelectorAll('.timeframe-strip .tf-btn').forEach(b => {
         b.classList.remove('active');
-        if (b.textContent === tf) b.classList.add('active');
+        if (b.textContent.trim() === tf) b.classList.add('active');
       });
       if (typeof drawMomentumChart === "function") drawMomentumChart();
     }
 
     // Slider Changed
     function onSliderChange(val) {
-      document.getElementById('sliderPctLabel').textContent = `${val}% Power`;
+      const lbl = document.getElementById('sliderValDisplay') || document.getElementById('sliderPctLabel');
+      if (lbl) lbl.textContent = `${val}% Power`;
       runCalculator();
     }
+    const onSliderMove = onSliderChange;
 
     // Order Sizing Calculator
     function applyStockToCalc() {
       const sel = document.getElementById('calcStock');
+      if (!sel) return;
       const opt = sel.options[sel.selectedIndex];
-      document.getElementById('calcPrice').value = opt.getAttribute('data-price');
-      document.getElementById('calcStop').value = opt.getAttribute('data-stop');
+      if (!opt) return;
+      const entryEl = document.getElementById('calcEntry') || document.getElementById('calcPrice');
+      const stopEl = document.getElementById('calcStop');
+      if (entryEl) entryEl.value = opt.getAttribute('data-price') || '3509.00';
+      if (stopEl) stopEl.value = opt.getAttribute('data-stop') || '3455.00';
       runCalculator();
     }
 
     function runCalculator() {
-      const capital = 15000.0;
-      const maxRiskRs = 225.0; // 1.5% day risk cap
-      const price = parseFloat(document.getElementById('calcPrice').value) || 3509.00;
-      const stop = parseFloat(document.getElementById('calcStop').value) || 3455.00;
-      const riskPerShare = Math.max(price - stop, 0.50);
+      try {
+        const capital = 15000.0;
+        const maxRiskRs = 225.0; // 1.5% day risk cap
+        const entryEl = document.getElementById('calcEntry') || document.getElementById('calcPrice');
+        const stopEl = document.getElementById('calcStop');
+        const price = (entryEl ? parseFloat(entryEl.value) : 3509.00) || 3509.00;
+        const stop = (stopEl ? parseFloat(stopEl.value) : 3455.00) || 3455.00;
+        const riskPerShare = Math.max(price - stop, 0.50);
 
-      const sliderPct = parseInt(document.getElementById('marginSlider').value) || 50;
-      // Max 5x buying power = ₹75,000. Sliced by slider (max 50% = ₹37,500 per trade)
-      const maxExposure = 75000.0 * (sliderPct / 100.0);
-      const marginQty = Math.max(1, Math.floor(maxExposure / price));
-      const riskSafeQty = Math.max(1, Math.floor(maxRiskRs / riskPerShare));
-      const qty = Math.min(riskSafeQty, marginQty);
+        const sliderEl = document.getElementById('marginSlider');
+        const sliderPct = sliderEl ? (parseInt(sliderEl.value) || 50) : 50;
+        const maxExposure = 75000.0 * (sliderPct / 100.0);
+        const marginQty = Math.max(1, Math.floor(maxExposure / price));
+        const riskSafeQty = Math.max(1, Math.floor(maxRiskRs / riskPerShare));
+        const qty = Math.min(riskSafeQty, marginQty);
 
-      const actualRisk = Math.min(Math.round(qty * riskPerShare), Math.round(maxRiskRs));
-      const notional = qty * price;
-      const marginReq = notional / 5.0;
-      const t1 = Math.round(actualRisk * 1.5);
-      const t2 = Math.round(actualRisk * 2.5);
+        const actualRisk = Math.min(Math.round(qty * riskPerShare), Math.round(maxRiskRs));
+        const notional = qty * price;
+        const marginReq = notional / 5.0;
 
-      document.getElementById('calcResultQty').textContent = `${qty} shares (Val: ₹${notional.toLocaleString('en-IN', { maximumFractionDigits: 0 })})`;
-      document.getElementById('calcResultMargin').textContent = `₹${marginReq.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      document.getElementById('calcResultRisk').textContent = `₹${actualRisk.toFixed(2)} (${((actualRisk / capital) * 100).toFixed(1)}%)`;
-      document.getElementById('calcResultReward').textContent = `T1: +₹${t1} · T2: +₹${t2}`;
+        const qtyEl = document.getElementById('calcQty') || document.getElementById('calcResultQty');
+        const marginEl = document.getElementById('calcMargin') || document.getElementById('calcResultMargin');
+        const riskEl = document.getElementById('calcRisk') || document.getElementById('calcResultRisk');
+        const rewardEl = document.getElementById('calcResultReward');
+
+        if (qtyEl) qtyEl.textContent = `${qty} shares (Val: ₹${notional.toLocaleString('en-IN', { maximumFractionDigits: 0 })})`;
+        if (marginEl) marginEl.textContent = `₹${marginReq.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (riskEl) riskEl.textContent = `₹${actualRisk.toFixed(2)} (${((actualRisk / capital) * 100).toFixed(1)}%)`;
+        if (rewardEl) rewardEl.textContent = `T1: +₹${Math.round(actualRisk * 1.5)} · T2: +₹${Math.round(actualRisk * 2.5)}`;
+      } catch (e) {
+        console.warn('runCalculator caught error:', e);
+      }
     }
+    const updateSizingCalc = runCalculator;
 
     function setOrderSide(side) {
       document.querySelectorAll('.order-tabs-segmented button').forEach(b => {
@@ -2708,10 +2728,13 @@
     }
 
     function submitMisOrder() {
-      const sym = document.getElementById('calcStock').value;
-      const qtyText = document.getElementById('calcResultQty').textContent;
-      alert(`[${state.mode} SIMULATOR]\n5x Intraday MIS Order Executed Successfully!\n\nSymbol: ${sym}\nQuantity: ${qtyText}\nRisk Protected: ₹225 Max Stop`);
+      const sel = document.getElementById('calcStock');
+      const sym = sel ? sel.value : 'M&M';
+      const qtyEl = document.getElementById('calcQty') || document.getElementById('calcResultQty');
+      const qtyText = qtyEl ? qtyEl.textContent : '4 shares';
+      alert(`[${state.mode || 'PAPER'} SIMULATOR]\n5x Intraday MIS Order Executed Successfully!\n\nSymbol: ${sym}\nQuantity: ${qtyText}\nRisk Protected: ₹225 Max Stop`);
     }
+    const executeIntradayOrder = submitMisOrder;
 
     // Canvas Intraday Momentum Chart Drawing (Zentra Style Line + Gradient + Crosshair)
     function drawMomentumChart() {
@@ -3256,30 +3279,50 @@
       if (badgeEl) { badgeEl.textContent = "ACTIVE SESSION"; badgeEl.className = "stance-badge stance-strong"; }
     }
 
-    // Initial Load & Continuous Real-Time Auto-Stream (No click needed)
-    window.addEventListener('DOMContentLoaded', () => {
-      renderCandidates();
-      renderSectors();
-      renderPositions();
-      renderTrades();
-      renderLiveOrders();
-      runCalculator();
-      if (typeof drawMomentumChart === "function") drawMomentumChart();
+    // Initial Load & Continuous Real-Time Auto-Stream (Guaranteed non-blocking execution)
+    function initializeApp() {
+      try { renderCandidates(); } catch (e) { console.error('renderCandidates', e); }
+      try { renderSectors(); } catch (e) { console.error('renderSectors', e); }
+      try { renderPositions(); } catch (e) { console.error('renderPositions', e); }
+      try { renderTrades(); } catch (e) { console.error('renderTrades', e); }
+      try { renderLiveOrders(); } catch (e) { console.error('renderLiveOrders', e); }
+      try { runCalculator(); } catch (e) { console.error('runCalculator', e); }
+      try { if (typeof drawMomentumChart === "function") drawMomentumChart(); } catch (e) {}
 
       // Clock countdown every 1s
-      setInterval(tickClock, 1000);
-      tickClock();
+      try {
+        setInterval(tickClock, 1000);
+        tickClock();
+      } catch (e) {
+        console.error('tickClock', e);
+      }
 
       // Immediate first market quote fetch
-      pollLiveQuotes(false);
+      try {
+        pollLiveQuotes(false);
+      } catch (e) {
+        console.error('pollLiveQuotes', e);
+      }
 
       // Automated Continuous Real-Time Streaming loop (Every 1.2s without clicking)
       setInterval(() => {
-        pollLiveQuotes(false);
+        try {
+          pollLiveQuotes(false);
+        } catch (e) {
+          console.error('interval pollLiveQuotes', e);
+        }
       }, 1200);
 
-      window.addEventListener('resize', drawMomentumChart);
-    });
+      window.addEventListener('resize', () => {
+        try { if (typeof drawMomentumChart === "function") drawMomentumChart(); } catch (e) {}
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', initializeApp);
+    } else {
+      initializeApp();
+    }
   </script>
 </body>
 
