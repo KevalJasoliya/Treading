@@ -1637,19 +1637,20 @@
               <table class="data-table" style="width:100%; border-collapse:collapse;">
                 <thead>
                   <tr>
-                    <th style="width:11%; text-align:left; padding:10px 10px;">SYMBOL & GR.</th>
-                    <th style="width:10%; text-align:left; padding:10px 8px;">SECTOR</th>
-                    <th style="width:9%; text-align:right; padding:10px 8px;">LIVE LTP</th>
-                    <th style="width:8%; text-align:right; padding:10px 8px;">DAY CHG%</th>
-                    <th style="width:8%; text-align:right; padding:10px 8px;">VS SECTOR</th>
-                    <th style="width:7%; text-align:right; padding:10px 8px;">VOL RATIO</th>
-                    <th style="width:8%; text-align:right; padding:10px 8px;">5X QTY</th>
-                    <th style="width:8%; text-align:right; padding:10px 8px;">MARGIN</th>
-                    <th style="width:8%; text-align:right; padding:10px 8px;">RISK (₹225)</th>
-                    <th style="width:9%; text-align:center; padding:10px 8px;">TARGET 1 & 2</th>
-                    <th style="width:5%; text-align:center; padding:10px 8px;">R : R</th>
-                    <th style="width:9%; text-align:center; padding:10px 8px;">STATUS</th>
-                    <th style="width:8%; text-align:center; padding:10px 10px;">12-CHECK</th>
+                    <th style="width:11%; text-align:left; padding:10px 8px;">SYMBOL & GR.</th>
+                    <th style="width:9%; text-align:left; padding:10px 6px;">SECTOR</th>
+                    <th style="width:8%; text-align:right; padding:10px 6px;">LIVE LTP</th>
+                    <th style="width:10%; text-align:right; padding:10px 6px;">ENTRY & SL</th>
+                    <th style="width:7%; text-align:right; padding:10px 6px;">DAY CHG%</th>
+                    <th style="width:7%; text-align:right; padding:10px 6px;">VS SECTOR</th>
+                    <th style="width:6%; text-align:right; padding:10px 6px;">VOL RATIO</th>
+                    <th style="width:7%; text-align:right; padding:10px 6px;">5X QTY</th>
+                    <th style="width:7%; text-align:right; padding:10px 6px;">MARGIN</th>
+                    <th style="width:7%; text-align:right; padding:10px 6px;">RISK (₹225)</th>
+                    <th style="width:9%; text-align:center; padding:10px 6px;">TARGET 1 & 2</th>
+                    <th style="width:4%; text-align:center; padding:10px 6px;">R : R</th>
+                    <th style="width:8%; text-align:center; padding:10px 6px;">STATUS</th>
+                    <th style="width:7%; text-align:center; padding:10px 6px;">12-CHECK</th>
                   </tr>
                 </thead>
                 <tbody id="candidatesTableBody">
@@ -2373,6 +2374,12 @@
             </td>
             <td><span style="color:var(--text-secondary); font-weight:600;">${c.sector}</span></td>
             <td><strong class="num font-bold" id="candLtp_${c.symbol}" style="font-size:13px; color:var(--text-white); padding:2px 4px;">₹${c.ltp.toFixed(2)}</strong></td>
+            <td>
+              <div class="num" style="font-size:12px; line-height:1.25; text-align:right;">
+                <span style="color:var(--text-white); font-weight:800;">₹${(c.entry || c.ltp).toFixed(2)}</span>
+                <div style="font-size:10.5px; color:var(--bearish); font-weight:700;">SL: ₹${stopPrice.toFixed(2)}</div>
+              </div>
+            </td>
             <td><span class="num font-bold" id="candChg_${c.symbol}" style="padding:2px 4px; color:${c.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${c.chg >= 0 ? '+' : ''}${c.chg.toFixed(2)}%</span></td>
             <td><span class="num font-bold" style="color:${c.stockVsSector >= 0.30 ? 'var(--bullish)' : (c.stockVsSector >= 0 ? 'var(--light-blue)' : 'var(--bearish)')};">${c.stockVsSector >= 0 ? '+' : ''}${Number(c.stockVsSector).toFixed(2)}%</span></td>
             <td><span class="num font-bold" style="color:${c.volRatio >= 1.5 ? 'var(--light-blue)' : 'var(--text-muted)'};">${Number(c.volRatio).toFixed(2)}x</span></td>
@@ -3137,6 +3144,8 @@
                 grade: c.grade || 'A',
                 sector: 'NIFTY ' + (c.sector || 'AUTO').replace('NIFTY ', ''),
                 ltp: ltp,
+                entry: (c.planned && c.planned.entry) || c.entry || ltp,
+                stop: stop,
                 prev_close: c.prev_close,
                 chg: chg,
                 stockVsSector: vsSec,
