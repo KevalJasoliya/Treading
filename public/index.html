@@ -2819,9 +2819,9 @@
     // Automatic Real-Time Market Streaming (Instant Auto-Update, No Clicks Needed)
     let isFetchingQuotes = false;
         
-    // API Endpoint resolution: If on Vercel, use native fast /api; if local, use direct path
+    // API Endpoint resolution: On cloud/Vercel use direct /api, on local dev use /api/s5/state
     function getApiUrl(endpoint) {
-      if (window.location.hostname.includes('vercel.app')) {
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         return '/api';
       }
       return endpoint;
@@ -2945,9 +2945,10 @@
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const targetUrl = getApiUrl('/api/s5/state');
-        const res = await fetch(targetUrl, { signal: controller.signal });
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const baseUrl = getApiUrl('/api/s5/state');
+        const targetUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+        const res = await fetch(targetUrl, { signal: controller.signal, cache: 'no-store' });
         clearTimeout(timeoutId);
 
         if (res.ok) {
@@ -2957,8 +2958,9 @@
           // 1. Feed Connection Status (SmartWebSocketV2)
           const text = document.getElementById('angelFeedText');
           if (text) {
+            const timeStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date());
             const ticks = (data.feed && data.feed.ticks) ? data.feed.ticks.toLocaleString('en-IN') : 'Live';
-            text.textContent = 'SmartAPI Live (' + ticks + ' ticks)';
+            text.textContent = 'SmartAPI Live (' + timeStr + ' · ' + ticks + ' ticks)';
           }
 
           // Order Feed Status Badge (SmartWebSocketOrderUpdate)
