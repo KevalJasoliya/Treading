@@ -2819,11 +2819,10 @@
     // Automatic Real-Time Market Streaming (Instant Auto-Update, No Clicks Needed)
     let isFetchingQuotes = false;
         
-    // API Endpoint resolution: If on Vercel, route to live SmartAPI tunnel; if local, use direct path
-    const LIVE_TUNNEL_URL = 'https://launched-circle-correctly-smell.trycloudflare.com';
+    // API Endpoint resolution: If on Vercel, use native fast /api; if local, use direct path
     function getApiUrl(endpoint) {
       if (window.location.hostname.includes('vercel.app')) {
-        return LIVE_TUNNEL_URL + endpoint;
+        return '/api';
       }
       return endpoint;
     }
