@@ -552,6 +552,39 @@
       box-shadow: 0 0 8px var(--bullish);
     }
 
+    /* Live Auto-Streaming Flash Effects (Zerodha/TradingView Style) */
+    @keyframes flashGreen {
+      0% { background-color: rgba(16, 185, 129, 0.45); color: #10b981; transform: scale(1.02); }
+      100% { background-color: transparent; transform: scale(1); }
+    }
+    @keyframes flashRed {
+      0% { background-color: rgba(239, 68, 68, 0.45); color: #ef4444; transform: scale(1.02); }
+      100% { background-color: transparent; transform: scale(1); }
+    }
+    .flash-up {
+      animation: flashGreen 0.75s ease-out;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    .flash-down {
+      animation: flashRed 0.75s ease-out;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    @keyframes liveGlowPulse {
+      0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.8); }
+      70% { transform: scale(1.2); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .live-pulse-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--bullish);
+      animation: liveGlowPulse 1.4s infinite;
+    }
+
     /* Dashboard Layout: 2 Columns */
     .dashboard-grid {
       flex: 1;
@@ -1514,12 +1547,13 @@
             <button class="mode-btn" id="modeLiveBtn" onclick="setTradingMode('LIVE')">LIVE</button>
           </div>
 
-          <!-- Live Quotes Button (30s) -->
-          <button class="btn-refresh-quotes" id="btnRefreshQuotes" onclick="fetchLiveQuotes(true)"
-            title="Auto-updates every 30s · Click to fetch now">
-            <span id="quoteBtnIcon">⚡</span>
-            <span id="quoteBtnText">Quotes</span>
-            <span class="quote-countdown-badge" id="quoteCountdown">30s</span>
+          <!-- Real-Time Auto Market Stream Indicator -->
+          <button class="btn-refresh-quotes" id="btnRefreshQuotes" onclick="triggerManualQuoteRefresh()"
+            style="cursor:pointer; display:flex; align-items:center; gap:6px; background:var(--bg-elevated); border:1px solid var(--bullish-border); padding:5px 12px; border-radius:20px;"
+            title="Auto-Streaming Real-Time Market Feed · Continuous live updates without clicking">
+            <span class="live-pulse-dot" style="margin-right:2px;"></span>
+            <span id="quoteBtnText" style="color:var(--text-white); font-weight:700;">AUTO STREAM</span>
+            <span class="quote-countdown-badge" id="quoteCountdown" style="background:var(--bullish-subtle); color:var(--bullish); font-weight:800; font-family:'JetBrains Mono',monospace;">LIVE</span>
           </button>
         </div>
       </div>
@@ -2338,8 +2372,8 @@
               </div>
             </td>
             <td><span style="color:var(--text-secondary); font-weight:600;">${c.sector}</span></td>
-            <td><strong class="num font-bold" style="font-size:13px; color:var(--text-white);">₹${c.ltp.toFixed(2)}</strong></td>
-            <td><span class="num font-bold" style="color:${c.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${c.chg >= 0 ? '+' : ''}${c.chg.toFixed(2)}%</span></td>
+            <td><strong class="num font-bold" id="candLtp_${c.symbol}" style="font-size:13px; color:var(--text-white); padding:2px 4px;">₹${c.ltp.toFixed(2)}</strong></td>
+            <td><span class="num font-bold" id="candChg_${c.symbol}" style="padding:2px 4px; color:${c.chg >= 0 ? 'var(--bullish)' : 'var(--bearish)'};">${c.chg >= 0 ? '+' : ''}${c.chg.toFixed(2)}%</span></td>
             <td><span class="num font-bold" style="color:${c.stockVsSector >= 0.30 ? 'var(--bullish)' : (c.stockVsSector >= 0 ? 'var(--light-blue)' : 'var(--bearish)')};">${c.stockVsSector >= 0 ? '+' : ''}${Number(c.stockVsSector).toFixed(2)}%</span></td>
             <td><span class="num font-bold" style="color:${c.volRatio >= 1.5 ? 'var(--light-blue)' : 'var(--text-muted)'};">${Number(c.volRatio).toFixed(2)}x</span></td>
             <td>
@@ -2779,10 +2813,11 @@
       ctx.fillText(`₹${data[pIdx].toFixed(1)} +4.2%`, calloutPt.x - 38, calloutPt.y - 20);
     }
 
-    // 30-Second Auto Refresh & On-Demand Manual Quotes
-    let quoteSecondsLeft = 30;
-    let isFetchingQuotes = false;
+    // State tracker for real-time price flashing
+    const lastSeenPrices = {};
 
+    // Automatic Real-Time Market Streaming (Instant Auto-Update, No Clicks Needed)
+    let isFetchingQuotes = false;
         
     // API Endpoint resolution: If on Vercel, route to live SmartAPI tunnel; if local, use direct path
     const LIVE_TUNNEL_URL = 'https://launched-circle-correctly-smell.trycloudflare.com';
@@ -2793,27 +2828,17 @@
       return endpoint;
     }
 
-    // Alias for header button click
-    function fetchLiveQuotes(isManual = false) {
-      return triggerManualQuoteRefresh();
-    }
-
-    function tickQuoteTimer() {
-      quoteSecondsLeft--;
-      if (quoteSecondsLeft <= 0) {
-        quoteSecondsLeft = 3;
-        pollLiveQuotes(false);
-      }
-      const el = document.getElementById('quoteCountdown');
-      if (el) el.textContent = `${quoteSecondsLeft}s`;
-    }
-
+    // Manual Refresh Override (Optional - continuous auto-updates run 24/7)
     async function triggerManualQuoteRefresh() {
       if (isFetchingQuotes) return;
-      quoteSecondsLeft = 3;
       const el = document.getElementById('quoteCountdown');
-      if (el) el.textContent = `3s`;
+      if (el) el.textContent = 'SYNC';
       await pollLiveQuotes(true);
+      if (el) el.textContent = 'LIVE';
+    }
+
+    function fetchLiveQuotes(isManual = false) {
+      return triggerManualQuoteRefresh();
     }
 
     // Client-side fallback market engine with authentic individual price ticks
@@ -2860,6 +2885,19 @@
         if (c.target2) c.target2 = Math.round((c.ltp + (c.ltp - c.stop) * 2.5) * 10) / 10;
       });
       renderCandidates();
+
+      state.candidates.forEach(c => {
+        const prev = lastSeenPrices[c.symbol];
+        if (prev !== undefined && Math.abs(prev - c.ltp) > 0.001) {
+          const el = document.getElementById('candLtp_' + c.symbol);
+          if (el) {
+            el.classList.remove('flash-up', 'flash-down');
+            void el.offsetWidth;
+            el.classList.add(c.ltp > prev ? 'flash-up' : 'flash-down');
+          }
+        }
+        lastSeenPrices[c.symbol] = c.ltp;
+      });
 
       // 4. Sector Breadth variation
       const advEl = document.getElementById('adAdvances');
@@ -2940,7 +2978,16 @@
             const npEl = document.getElementById('niftyPrice');
             const nChgEl = document.getElementById('niftyChg');
             const nStance = document.getElementById('niftyStance');
-            if (npEl && ltp !== undefined) npEl.textContent = Number(ltp).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (npEl && ltp !== undefined) {
+              const curLtp = Number(ltp);
+              if (lastSeenPrices['NIFTY'] !== undefined && lastSeenPrices['NIFTY'] !== curLtp) {
+                npEl.classList.remove('flash-up', 'flash-down');
+                void npEl.offsetWidth;
+                npEl.classList.add(curLtp > lastSeenPrices['NIFTY'] ? 'flash-up' : 'flash-down');
+              }
+              lastSeenPrices['NIFTY'] = curLtp;
+              npEl.textContent = curLtp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
             if (nChgEl && chg !== undefined) {
               nChgEl.textContent = (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%';
               nChgEl.style.color = chg >= 0 ? 'var(--bullish)' : 'var(--bearish)';
@@ -2955,7 +3002,16 @@
             const chg = vixObj.chg !== undefined ? vixObj.chg : vixObj.change_pct;
             const vpEl = document.getElementById('vixPrice');
             const vChgEl = document.getElementById('vixChg');
-            if (vpEl && ltp !== undefined) vpEl.textContent = Number(ltp).toFixed(2);
+            if (vpEl && ltp !== undefined) {
+              const curVix = Number(ltp);
+              if (lastSeenPrices['VIX'] !== undefined && lastSeenPrices['VIX'] !== curVix) {
+                vpEl.classList.remove('flash-up', 'flash-down');
+                void vpEl.offsetWidth;
+                vpEl.classList.add(curVix < lastSeenPrices['VIX'] ? 'flash-up' : 'flash-down');
+              }
+              lastSeenPrices['VIX'] = curVix;
+              vpEl.textContent = curVix.toFixed(2);
+            }
             if (vChgEl && chg !== undefined) {
               vChgEl.textContent = (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%';
               vChgEl.style.color = chg <= 0 ? 'var(--bullish)' : 'var(--bearish)';
@@ -3072,6 +3128,20 @@
               };
             });
             renderCandidates();
+
+            // Real-time flash effect on candidate price changes
+            state.candidates.forEach(c => {
+              const prev = lastSeenPrices[c.symbol];
+              if (prev !== undefined && Math.abs(prev - c.ltp) > 0.001) {
+                const el = document.getElementById('candLtp_' + c.symbol);
+                if (el) {
+                  el.classList.remove('flash-up', 'flash-down');
+                  void el.offsetWidth;
+                  el.classList.add(c.ltp > prev ? 'flash-up' : 'flash-down');
+                }
+              }
+              lastSeenPrices[c.symbol] = c.ltp;
+            });
           }
 
           // 7. Day P&L & Meters
@@ -3131,18 +3201,9 @@
         // Network / CORS / timeout
       }
 
-      // If backend not reached, run client-side ticks
+      // If backend not reached, run continuous client-side ticks
       if (!dataReceived) {
         applyClientMarketTicks();
-      }
-
-      if (btnText && btnIcon) {
-        btnIcon.textContent = '✓';
-        btnText.textContent = 'Updated';
-        setTimeout(() => {
-          btnIcon.textContent = '⚡';
-          btnText.textContent = 'Quotes';
-        }, 1200);
       }
 
       isFetchingQuotes = false;
@@ -3194,7 +3255,7 @@
       if (badgeEl) { badgeEl.textContent = "ACTIVE SESSION"; badgeEl.className = "stance-badge stance-strong"; }
     }
 
-    // Initial Load & Listeners
+    // Initial Load & Continuous Real-Time Auto-Stream (No click needed)
     window.addEventListener('DOMContentLoaded', () => {
       renderCandidates();
       renderSectors();
@@ -3204,13 +3265,17 @@
       runCalculator();
       if (typeof drawMomentumChart === "function") drawMomentumChart();
 
+      // Clock countdown every 1s
       setInterval(tickClock, 1000);
       tickClock();
 
-      setInterval(tickQuoteTimer, 1000);
+      // Immediate first market quote fetch
       pollLiveQuotes(false);
-      // Fast real-time stream interval (every 2.5s)
-      setInterval(() => pollLiveQuotes(false), 2500);
+
+      // Automated Continuous Real-Time Streaming loop (Every 1.2s without clicking)
+      setInterval(() => {
+        pollLiveQuotes(false);
+      }, 1200);
 
       window.addEventListener('resize', drawMomentumChart);
     });
