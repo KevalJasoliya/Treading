@@ -22,12 +22,90 @@ MC_CACHE = {
 }
 
 CANDIDATES = [
-    {"symbol": "BAJAJ-AUTO", "token": "16669", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 10818.00, "prev_close": 10817.00, "stop": 10700.00},
-    {"symbol": "MARUTI", "token": "10999", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 13869.00, "prev_close": 13589.00, "stop": 13750.00},
-    {"symbol": "HEROMOTOCO", "token": "1348", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 5560.50, "prev_close": 5556.00, "stop": 5490.00},
-    {"symbol": "M&M", "token": "2031", "grade": "A", "sector": "NIFTY AUTO", "base_ltp": 3512.40, "prev_close": 3509.00, "stop": 3465.00},
-    {"symbol": "RELIANCE", "token": "2885", "grade": "A", "sector": "NIFTY ENERGY", "base_ltp": 1360.80, "prev_close": 1375.60, "stop": 1345.00},
-    {"symbol": "ONGC", "token": "2475", "grade": "B", "sector": "NIFTY ENERGY", "base_ltp": 224.35, "prev_close": 224.52, "stop": 221.00}
+    {
+        "symbol": "MARUTI",
+        "token": "10999",
+        "grade": "A",
+        "sector": "NIFTY AUTO",
+        "base_ltp": 13869.00,
+        "prev_close": 13589.00,
+        "entry": 13850.00,
+        "stop": 13750.00,
+        "qty": 2,
+        "t1": 14000.00,
+        "t2": 14100.00,
+        "risk_rs": 200.00
+    },
+    {
+        "symbol": "BAJAJ-AUTO",
+        "token": "16669",
+        "grade": "A",
+        "sector": "NIFTY AUTO",
+        "base_ltp": 10818.00,
+        "prev_close": 10817.00,
+        "entry": 10880.00,
+        "stop": 10700.00,
+        "qty": 1,
+        "t1": 11150.00,
+        "t2": 11330.00,
+        "risk_rs": 180.00
+    },
+    {
+        "symbol": "M&M",
+        "token": "2031",
+        "grade": "A",
+        "sector": "NIFTY AUTO",
+        "base_ltp": 3512.40,
+        "prev_close": 3509.00,
+        "entry": 3510.00,
+        "stop": 3465.00,
+        "qty": 5,
+        "t1": 3577.50,
+        "t2": 3622.50,
+        "risk_rs": 225.00
+    },
+    {
+        "symbol": "HEROMOTOCO",
+        "token": "1348",
+        "grade": "A",
+        "sector": "NIFTY AUTO",
+        "base_ltp": 5560.50,
+        "prev_close": 5556.00,
+        "entry": 5570.00,
+        "stop": 5490.00,
+        "qty": 2,
+        "t1": 5690.00,
+        "t2": 5770.00,
+        "risk_rs": 160.00
+    },
+    {
+        "symbol": "RELIANCE",
+        "token": "2885",
+        "grade": "A",
+        "sector": "NIFTY ENERGY",
+        "base_ltp": 1360.80,
+        "prev_close": 1375.60,
+        "entry": 1375.00,
+        "stop": 1360.00,
+        "qty": 15,
+        "t1": 1397.50,
+        "t2": 1412.50,
+        "risk_rs": 225.00
+    },
+    {
+        "symbol": "ONGC",
+        "token": "2475",
+        "grade": "B",
+        "sector": "NIFTY ENERGY",
+        "base_ltp": 224.35,
+        "prev_close": 224.52,
+        "entry": 225.50,
+        "stop": 223.50,
+        "qty": 112,
+        "t1": 228.50,
+        "t2": 230.50,
+        "risk_rs": 224.00
+    }
 ]
 
 DEFAULT_SECTORS = [
@@ -245,14 +323,18 @@ def generate_live_quote_data():
         vol_trade = q.get('tradeVolume', 0)
         volRatio = round(2.35 if vol_trade > 100000 else 1.85, 2)
         
+        # Fixed Strategy 5 Planned Setup (NEVER changes with live price ticks)
+        entry_price = c["entry"]
         stop_price = c["stop"]
-        risk_per_sh = max(1.0, ltp - stop_price)
-        qty = max(1, min(100, int(225.0 / risk_per_sh)))
-        margin = round((ltp * qty) / 5.0, 2)
-        risk_total = round(risk_per_sh * qty, 2)
+        qty = c["qty"]
+        t1 = c["t1"]
+        t2 = c["t2"]
+        risk_total = c["risk_rs"]
+        margin = round((entry_price * qty) / 5.0, 2)
         
-        t1 = round(ltp + risk_per_sh * 1.5, 1)
-        t2 = round(ltp + risk_per_sh * 2.5, 1)
+        # Trigger condition: Triggered when Live LTP >= Planned Entry
+        is_triggered = (ltp >= entry_price)
+        status = "QUALIFIED ★" if (is_triggered and vsSec > 0) else ("TRIGGERED" if is_triggered else "WATCHING")
         
         candidates_resp.append({
             "symbol": c["symbol"],
@@ -268,19 +350,23 @@ def generate_live_quote_data():
             "stock_vs_sector": vsSec,
             "volRatio": volRatio,
             "vol_ratio": volRatio,
-            "stop": stop_price,
-            "target1": t1,
-            "target2": t2,
-            "status": "QUALIFIED" if (chg > 1.0 and vsSec > 0) else "WATCHING",
-            "tradeable": True if (chg > 1.0 and vsSec > 0) else False,
+            "entry": entry_price,      # FIXED Planned Entry Trigger
+            "stop": stop_price,        # FIXED Planned Stop Loss
+            "target1": t1,             # FIXED Target 1 (1.5R)
+            "target2": t2,             # FIXED Target 2 (2.5R)
+            "qty": qty,                # FIXED 5x Sized Quantity
+            "margin": margin,          # FIXED Margin Required
+            "risk_rs": risk_total,     # FIXED Max Risk Protected
+            "status": status,
+            "tradeable": is_triggered,
             "planned": {
-                "entry": ltp,
+                "entry": entry_price,
                 "stop": stop_price,
                 "t1": t1,
                 "t2": t2,
                 "qty": qty,
                 "risk_rs": risk_total,
-                "notional": round(ltp * qty, 2)
+                "notional": round(entry_price * qty, 2)
             }
         })
 
