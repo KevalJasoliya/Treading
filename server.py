@@ -1,683 +1,290 @@
 #!/usr/bin/env python3
 """
-QuantLeaf Strategy 5 - Sector Leaders Intraday Server
-Capital Model: ₹15,000 Cash · 5x MIS Intraday Margin (₹75,000 Purchasing Power) · Pure Cash Equity (No F&O)
-Live Feed: Angel One SmartAPI
+QuantLeaf · Strategy 5 · Sector Leaders Intraday – server
+
+    python3 server.py              # LIVE Angel One data, PAPER trading (needs .env + pip install -r requirements.txt)
+    python3 server.py --demo       # simulated market (for testing, weekends, after hours)
+    python3 server.py --demo --demo-start 09:40 --demo-speed 20
+
+Open http://127.0.0.1:8081
+Security: listens on 127.0.0.1 only (not your Wi-Fi network). Only index.html and /api/* are served –
+.env, logs and data files can never be downloaded.
 """
-
+import argparse
 import http.server
-import socketserver
 import json
-import urllib.parse
 import os
+import socketserver
 import sys
-import time
 import threading
-import base64
-import hashlib
-import hmac
-import struct
-import random
+import time
+import traceback
+import urllib.parse
+from datetime import datetime, date, timedelta
 
-try:
-    import pyotp
-    from SmartApi import SmartConnect
-    SMARTAPI_AVAILABLE = True
-except ImportError:
-    SMARTAPI_AVAILABLE = False
-    SmartConnect = None
-    pyotp = None
+from s5.core import IST, ROOT, load_config, Candle
+from s5.engine import Engine, Store, DATA
+from s5 import angel
 
-PORT = 8081
-DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(DIRECTORY, ".env")
+INDEX = os.path.join(ROOT, "index.html")
 
-def load_env():
-    creds = {
-        "ANGEL_API_KEY": "",
-        "ANGEL_CLIENT_ID": "",
-        "ANGEL_PIN": "",
-        "ANGEL_TOTP_SECRET": ""
-    }
-    if os.path.exists(ENV_PATH):
-        try:
-            with open(ENV_PATH, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        k = k.strip()
-                        v = v.strip().strip('"').strip("'")
-                        if k in creds:
-                            creds[k] = v
-        except Exception as e:
-            print("Error loading .env:", e)
-    return creds
 
-CREDENTIALS = load_env()
-
-def get_totp(secret: str) -> str:
-    if pyotp:
-        try:
-            return pyotp.TOTP(secret.strip().replace(" ", "").upper()).now()
-        except Exception:
-            pass
-    clean = secret.replace(" ", "").upper()
-    pad = len(clean) % 8
-    if pad:
-        clean += "=" * (8 - pad)
-    key = base64.b32decode(clean, True)
-    counter = int(time.time() // 30)
-    msg = struct.pack(">Q", counter)
-    h = hmac.new(key, msg, hashlib.sha1).digest()
-    o = h[19] & 15
-    code = (struct.unpack(">I", h[o:o+4])[0] & 0x7FFFFFFF) % 1000000
-    return f"{code:06d}"
-
-class SmartAPIManager:
-    def __init__(self):
-        self.smart = None
-        self.is_connected = False
-        self.last_login_time = 0
-        self.last_quote_time = 0
-        self.last_error = None
-        self.user_name = ""
-
-    def connect(self, api_key=None, client_id=None, pin=None, totp_secret=None):
-        if api_key: CREDENTIALS["ANGEL_API_KEY"] = api_key
-        if client_id: CREDENTIALS["ANGEL_CLIENT_ID"] = client_id
-        if pin: CREDENTIALS["ANGEL_PIN"] = pin
-        if totp_secret: CREDENTIALS["ANGEL_TOTP_SECRET"] = totp_secret
-
-        ak = CREDENTIALS.get("ANGEL_API_KEY")
-        cid = CREDENTIALS.get("ANGEL_CLIENT_ID")
-        p = CREDENTIALS.get("ANGEL_PIN")
-        sec = CREDENTIALS.get("ANGEL_TOTP_SECRET")
-
-        if not (ak and cid and p and sec):
-            self.is_connected = False
-            self.last_error = "Incomplete Angel One credentials"
-            return False, self.last_error
-
-        if not SMARTAPI_AVAILABLE:
-            self.is_connected = False
-            self.last_error = "SmartApi package not available"
-            return False, self.last_error
-
-        try:
-            totp = get_totp(sec)
-            self.smart = SmartConnect(api_key=ak)
-            res = self.smart.generateSession(cid, p, totp)
-            if res and res.get("status"):
-                self.is_connected = True
-                self.last_login_time = time.time()
-                self.last_error = None
-                self.user_name = res.get("data", {}).get("name", "")
-                print(f"✓ Angel One SmartAPI Connected for {self.user_name} ({cid})")
-                return True, "Connected successfully"
-            else:
-                self.is_connected = False
-                self.last_error = res.get("message", "Login failed") if res else "No response"
-                print(f"✗ Angel One Login Error: {self.last_error}")
-                return False, self.last_error
-        except Exception as e:
-            self.is_connected = False
-            self.last_error = str(e)
-            print(f"✗ Angel One Exception: {e}")
-            return False, str(e)
-
-    def fetch_quotes(self, tokens):
-        if not self.is_connected or not self.smart:
-            return None, "Not connected"
-        try:
-            res = self.smart.getMarketData("FULL", {"NSE": tokens})
-            if res and res.get("status"):
-                self.last_quote_time = time.time()
-                return res.get("data", {}).get("fetched", []), None
-            else:
-                if res and ("token" in str(res).lower() or "session" in str(res).lower()):
-                    print("Session expired, reconnecting...")
-                    self.connect()
-                return None, res.get("message", "Quote fetch failed") if res else "Empty response"
-        except Exception as e:
-            return None, str(e)
-
-api_manager = SmartAPIManager()
-
-# Token mappings
-TOKEN_MAP = {
-    "99926000": {"symbol": "NIFTY50", "name": "NIFTY 50", "type": "index"},
-    "99926017": {"symbol": "India VIX", "name": "INDIA VIX", "type": "index"},
-    "16669": {"symbol": "BAJAJ-AUTO", "name": "BAJAJ-AUTO-EQ", "sector": "NIFTY AUTO"},
-    "2031": {"symbol": "M&M", "name": "M&M-EQ", "sector": "NIFTY AUTO"},
-    "10999": {"symbol": "MARUTI", "name": "MARUTI-EQ", "sector": "NIFTY AUTO"},
-    "1348": {"symbol": "HEROMOTOCO", "name": "HEROMOTOCO-EQ", "sector": "NIFTY AUTO"},
-    "2885": {"symbol": "RELIANCE", "name": "RELIANCE-EQ", "sector": "NIFTY ENERGY"},
-    "2475": {"symbol": "ONGC", "name": "ONGC-EQ", "sector": "NIFTY ENERGY"},
-    "11630": {"symbol": "NTPC", "name": "NTPC-EQ", "sector": "NIFTY ENERGY"},
-    "526": {"symbol": "BPCL", "name": "BPCL-EQ", "sector": "NIFTY ENERGY"}
-}
-
-MARKET_STATE = {
-    "nifty": {
-        "price": 25471.80,
-        "prev_close": 25227.95,
-        "change_pct": 0.97,
-        "stance": "Strong",
-        "market_ok": True
-    },
-    "india_vix": {
-        "price": 12.84,
-        "prev_close": 13.15,
-        "change_pct": -2.36,
-        "stance": "Normal"
-    },
-    "nifty_breadth": {
-        "advances": 34,
-        "declines": 16,
-        "unchanged": 0,
-        "ratio": 2.13,
-        "stance": "Bullish Breadth"
-    },
-    "tokens": {},
-    "last_update": time.time(),
-    "source": "SIMULATED"
-}
-
-# Capital Specification: ₹15,000 Cash · 5x Intraday Equity Margin
-CAPITAL_CONFIG = {
-    "cash_capital": 15000.00,
-    "margin_multiplier": 5.0,
-    "buying_power": 75000.00,
-    "risk_pct_grade_a": 0.015,     # 1.5% = ₹225
-    "risk_pct_grade_b": 0.010,     # 1.0% = ₹150
-    "risk_rs_grade_a": 225.00,
-    "risk_rs_grade_b": 150.00,
-    "day_stop_loss": -450.00,      # -3.0% of cash capital
-    "week_stop_loss": -900.00,     # -6.0% of cash capital
-    "max_concurrent_positions": 2
-}
-
-# Live Candidates sized specifically for ₹15k Cash & 5x MIS Margin
-CANDIDATES = [
-    {
-        "symbol": "BAJAJ-AUTO",
-        "token": "16669",
-        "grade": "A",
-        "sector": "NIFTY AUTO",
-        "ltp": 10782.00,
-        "prev_close": 10570.00,
-        "chg": 2.01,
-        "stockVsSector": -2.38,
-        "volRatio": 2.25,
-        "rangePos": 0.86,
-        "atrMove": 0.68,
-        "planned_qty": 1,
-        "margin_req": 2156.40,
-        "plannedRisk": 117.00,
-        "risk_rs": 117.00,
-        "planned_entry": 10785.00,
-        "stop": 10668.00,
-        "target1": 10965.00,
-        "target2": 11085.00,
-        "rr_ratio": "1 : 2.5",
-        "status": "WATCHING"
-    },
-    {
-        "symbol": "M&M",
-        "token": "2031",
-        "grade": "A",
-        "sector": "NIFTY AUTO",
-        "ltp": 3498.70,
-        "prev_close": 3359.10,
-        "chg": 4.16,
-        "stockVsSector": -0.23,
-        "volRatio": 2.85,
-        "rangePos": 0.94,
-        "atrMove": 0.78,
-        "planned_qty": 5,
-        "margin_req": 3498.70,
-        "plannedRisk": 43.70,
-        "risk_rs": 218.50,
-        "planned_entry": 3498.00,
-        "stop": 3455.00,
-        "target1": 3568.00,
-        "target2": 3615.00,
-        "rr_ratio": "1 : 2.5",
-        "status": "WATCHING"
-    },
-    {
-        "symbol": "MARUTI",
-        "token": "10999",
-        "grade": "A",
-        "sector": "NIFTY AUTO",
-        "ltp": 13433.00,
-        "prev_close": 12632.00,
-        "chg": 6.34,
-        "stockVsSector": 1.95,
-        "volRatio": 3.40,
-        "rangePos": 0.92,
-        "atrMove": 0.85,
-        "planned_qty": 1,
-        "margin_req": 2686.60,
-        "plannedRisk": 155.00,
-        "risk_rs": 155.00,
-        "planned_entry": 13435.00,
-        "stop": 13280.00,
-        "target1": 13670.00,
-        "target2": 13825.00,
-        "rr_ratio": "1 : 2.5",
-        "status": "WATCHING"
-    },
-    {
-        "symbol": "HEROMOTOCO",
-        "token": "1348",
-        "grade": "A",
-        "sector": "NIFTY AUTO",
-        "ltp": 5517.50,
-        "prev_close": 5253.00,
-        "chg": 5.04,
-        "stockVsSector": 0.65,
-        "volRatio": 2.60,
-        "rangePos": 0.95,
-        "atrMove": 0.75,
-        "planned_qty": 3,
-        "margin_req": 3310.50,
-        "plannedRisk": 72.50,
-        "risk_rs": 217.50,
-        "planned_entry": 5520.00,
-        "stop": 5447.50,
-        "target1": 5635.00,
-        "target2": 5710.00,
-        "rr_ratio": "1 : 2.5",
-        "status": "WATCHING"
-    },
-    {
-        "symbol": "RELIANCE",
-        "token": "2885",
-        "grade": "A",
-        "sector": "NIFTY ENERGY",
-        "ltp": 1375.10,
-        "prev_close": 1363.00,
-        "chg": 0.89,
-        "stockVsSector": 0.20,
-        "volRatio": 2.10,
-        "rangePos": 0.87,
-        "atrMove": 0.62,
-        "planned_qty": 15,
-        "margin_req": 4125.30,
-        "plannedRisk": 14.50,
-        "risk_rs": 217.50,
-        "planned_entry": 1376.00,
-        "stop": 1361.50,
-        "target1": 1399.00,
-        "target2": 1416.00,
-        "rr_ratio": "1 : 2.6",
-        "status": "WATCHING"
-    },
-    {
-        "symbol": "ONGC",
-        "token": "2475",
-        "grade": "B",
-        "sector": "NIFTY ENERGY",
-        "ltp": 225.18,
-        "prev_close": 225.00,
-        "chg": 0.08,
-        "stockVsSector": -0.61,
-        "volRatio": 1.45,
-        "rangePos": 0.87,
-        "atrMove": 0.45,
-        "planned_qty": 55,
-        "margin_req": 2476.98,
-        "plannedRisk": 2.68,
-        "risk_rs": 147.40,
-        "planned_entry": 225.20,
-        "stop": 222.50,
-        "target1": 229.30,
-        "target2": 232.00,
-        "rr_ratio": "1 : 2.5",
-        "status": "WATCHING"
-    }
-]
-
-# Active position sized for ₹15k Cash & 5x Margin
-POSITIONS = [
-    {
-        "id": "POS-001",
-        "symbol": "M&M",
-        "token": "2031",
-        "sector": "NIFTY AUTO",
-        "qty": 5,
-        "entry_fill": 3360.00,
-        "current_ltp": 3498.70,
-        "stop": 3450.00,
-        "target1": 3568.00,
-        "target2": 3615.00,
-        "variant": "E2",
-        "unrealized_pnl": round((3498.70 - 3360.00) * 5, 2),
-        "r_multiple": round(((3498.70 - 3360.00) * 5) / 225.0, 2),
-        "margin_blocked": round((3360.00 * 5) / 5, 2),
-        "rr_ratio": "1 : 2.5"
-    }
-]
-
-SECTORS = [
-    {"name": "NIFTY AUTO", "members": 15, "chg": 4.39, "rs": 3.42, "rank": 1, "persistence": 3, "isTop2": True},
-    {"name": "NIFTY ENERGY", "members": 12, "chg": 0.69, "rs": -0.28, "rank": 2, "persistence": 3, "isTop2": True},
-    {"name": "NIFTY PHARMA", "members": 16, "chg": 0.65, "rs": -0.31, "rank": 3, "persistence": 2, "isTop2": False},
-    {"name": "NIFTY IT", "members": 10, "chg": 0.48, "rs": -0.48, "rank": 4, "persistence": 1, "isTop2": False},
-    {"name": "NIFTY BANK", "members": 12, "chg": 0.35, "rs": -0.61, "rank": 5, "persistence": 0, "isTop2": False},
-    {"name": "NIFTY FMCG", "members": 14, "chg": 0.12, "rs": -0.84, "rank": 6, "persistence": 0, "isTop2": False},
-    {"name": "NIFTY METAL", "members": 15, "chg": -0.22, "rs": -1.18, "rank": 7, "persistence": 0, "isTop2": False}
-]
-
-# Realized Morning Profit from closed trade
-REALIZED_PNL_TODAY = 320.00
-
-def background_quote_worker():
-    time.sleep(1.0)
-    if SMARTAPI_AVAILABLE and CREDENTIALS.get("ANGEL_API_KEY"):
-        api_manager.connect()
-
-    tokens_list = list(TOKEN_MAP.keys())
-
+# --------------------------------------------------------------------------- runners
+def run_scheduler(engine: Engine):
     while True:
         try:
-            if api_manager.is_connected:
-                quotes, err = api_manager.fetch_quotes(tokens_list)
-                if quotes and not err:
-                    MARKET_STATE["source"] = "ANGEL_SMARTAPI_LIVE"
-                    auto_chgs = []
-                    energy_chgs = []
+            engine.step()
+        except Exception:
+            traceback.print_exc()
+        time.sleep(0.25)
 
-                    for q in quotes:
-                        t = str(q.get("symbolToken"))
-                        ltp = float(q.get("ltp") or 0.0)
-                        prev_close = float(q.get("close") or ltp)
-                        chg_pct = float(q.get("percentChange") or 0.0)
 
-                        MARKET_STATE["tokens"][t] = {
-                            "ltp": ltp,
-                            "close": prev_close,
-                            "chg_pct": chg_pct,
-                            "high": float(q.get("high") or ltp),
-                            "low": float(q.get("low") or ltp),
-                            "volume": q.get("tradeVolume", 0)
-                        }
+def run_demo(cfg, args) -> Engine:
+    from s5.demo import DemoMarket, DemoClock, DemoFeed, demo_day
+    day = demo_day(datetime.now(IST).date())
+    clock = DemoClock(day, args.demo_start, args.demo_speed)
+    demo_dir = os.path.join(DATA, "demo")
+    if os.path.isdir(demo_dir):
+        for f in ("state.json", "trades.jsonl"):
+            try:
+                os.remove(os.path.join(demo_dir, f))
+            except OSError:
+                pass
+    engine = Engine(cfg, clock.now, "DEMO", Store(demo_dir), wall=clock.wall)
+    mkt = DemoMarket(cfg, day)
+    engine.load_universe(day.isoformat(), mkt.members, mkt.stats, mkt.nifty_stats, {})
+    engine.batch_info = {"status": "ready", "date": day.isoformat(), "stocks": len(mkt.stats),
+                         "notes": ["DEMO: simulated universe and prices"], "universe_source": "sector_map.csv (demo)"}
+    feed = DemoFeed(mkt, engine, clock)
+    if clock.now().strftime("%H:%M") > "09:15":
+        feed.backfill(clock.now())
+        engine.alert("info", "Demo: morning candles generated up to the start time (no trades on old candles).")
+    threading.Thread(target=feed.run, daemon=True, name="demo").start()
+    threading.Thread(target=run_scheduler, args=(engine,), daemon=True, name="sched").start()
+    return engine
 
-                        if t == "99926000":
-                            MARKET_STATE["nifty"]["price"] = ltp
-                            MARKET_STATE["nifty"]["prev_close"] = prev_close
-                            MARKET_STATE["nifty"]["change_pct"] = chg_pct
-                            if chg_pct >= 0.40:
-                                MARKET_STATE["nifty"]["stance"] = "Strong"
-                                adv = min(46, max(28, int(25 + chg_pct * 9)))
-                            elif chg_pct >= 0.0:
-                                MARKET_STATE["nifty"]["stance"] = "Mild"
-                                adv = min(35, max(26, int(25 + chg_pct * 8)))
-                            elif chg_pct >= -0.35:
-                                MARKET_STATE["nifty"]["stance"] = "Neutral"
-                                adv = max(18, int(25 + chg_pct * 8))
-                            else:
-                                MARKET_STATE["nifty"]["stance"] = "Bearish"
-                                adv = max(8, int(25 + chg_pct * 9))
-                            dec = 50 - adv
-                            ratio = round(adv / max(1, dec), 2)
-                            MARKET_STATE["nifty_breadth"] = {
-                                "advances": adv,
-                                "declines": dec,
-                                "unchanged": 0,
-                                "ratio": ratio,
-                                "stance": "Bullish Breadth" if adv >= dec else "Bearish Breadth"
-                            }
-                        elif t == "99926017":
-                            MARKET_STATE["india_vix"]["price"] = ltp
-                            MARKET_STATE["india_vix"]["prev_close"] = prev_close
-                            MARKET_STATE["india_vix"]["change_pct"] = chg_pct
-                            if ltp < 13.0: MARKET_STATE["india_vix"]["stance"] = "Low Vol"
-                            elif ltp <= 17.0: MARKET_STATE["india_vix"]["stance"] = "Normal"
-                            elif ltp <= 22.0: MARKET_STATE["india_vix"]["stance"] = "Elevated"
-                            else: MARKET_STATE["india_vix"]["stance"] = "High Risk"
 
-                        if t in ["16669", "2031", "10999", "1348"]:
-                            auto_chgs.append(chg_pct)
-                        elif t in ["2885", "2475", "11630", "526"]:
-                            energy_chgs.append(chg_pct)
+def run_live(cfg, env) -> Engine:
+    engine = Engine(cfg, lambda: datetime.now(IST), "LIVE")
+    client = angel.AngelClient(env)
+    state = {"feed": None}
 
-                        for c in CANDIDATES:
-                            if c.get("token") == t:
-                                c["ltp"] = ltp
-                                c["prev_close"] = prev_close
-                                c["chg"] = chg_pct
-                                high = float(q.get("high") or ltp)
-                                low = float(q.get("low") or ltp)
-                                rng = max(high - low, 1.0)
-                                c["rangePos"] = round(min(max((ltp - low) / rng, 0.0), 1.0), 2)
-                                max_risk_allowed = 225.0
-                                stop_price = c.get("stop", ltp * 0.988)
-                                risk_per_share = ltp - stop_price
-                                if risk_per_share > max_risk_allowed or risk_per_share <= 0:
-                                    risk_per_share = max_risk_allowed
-                                    stop_price = round(ltp - max_risk_allowed, 2)
-                                    c["stop"] = stop_price
-                                risk_safe_qty = max(1, int(max_risk_allowed / risk_per_share))
-                                max_margin_qty = max(1, int(37500.0 / ltp))
-                                c["planned_qty"] = min(risk_safe_qty, max_margin_qty)
-                                c["margin_req"] = round((ltp * c["planned_qty"]) / 5.0, 2)
-                                c["risk_rs"] = round(min(c["planned_qty"] * risk_per_share, max_risk_allowed), 2)
-                                c["target1"] = round(ltp + (risk_per_share * 1.5), 1)
-                                c["target2"] = round(ltp + (risk_per_share * 2.5), 1)
+    def prepare(day: str):
+        engine.feed_message = "Logging in to Angel One…"
+        while not client.login():
+            engine.feed_message = f"Login failed: {client.last_error} – retrying in 30 s"
+            time.sleep(30)
+        engine.feed_message = "Downloading instruments…"
+        tokens = angel.scrip_master(cfg["files"]["scrip_master_url"], day)
+        members, notes = angel.build_universe(cfg, tokens)
 
-                        for p in POSITIONS:
-                            if p.get("token") == t:
-                                p["current_ltp"] = ltp
-                                p["unrealized_pnl"] = round((ltp - p["entry_fill"]) * p["qty"], 2)
-                                p["r_multiple"] = round(p["unrealized_pnl"] / 225.0, 2)
+        def progress(i, n, sym):
+            engine.batch_info = {"status": "running", "date": day, "progress": f"{i}/{n}", "current": sym}
+        engine.feed_message = f"08:30 batch: daily data for {len(members)} stocks…"
+        stats, nifty, bnotes = angel.daily_batch(client, cfg, day, members, progress)
+        blocked = angel.read_blocks(cfg, day)
+        engine.load_universe(day, members, stats, nifty, blocked)
+        engine.user_name = client.user_name
+        engine.batch_info = {"status": "ready", "date": day, "stocks": len(stats), "of": len(members),
+                             "nifty_market_ok": nifty.get("market_ok"), "notes": (notes + bnotes)[:80]}
+        toks = [m["token"] for m in members] + [cfg["index_tokens"]["NIFTY"], cfg["index_tokens"]["INDIAVIX"]]
+        pcs = {m["token"]: stats[m["symbol"]].prev_close for m in members if m["symbol"] in stats}
+        if nifty.get("prev_close"):
+            pcs[cfg["index_tokens"]["NIFTY"]] = nifty["prev_close"]
+        if state["feed"]:
+            state["feed"].stop()
+        feed = angel.LiveFeed(client, engine, toks, pcs)
+        state["feed"] = feed
+        feed.snapshot_once()
+        feed.start()
+        engine.feed_message = "Live feed running"
 
-                    nifty_chg = MARKET_STATE["nifty"]["change_pct"]
-                    if auto_chgs:
-                        avg_auto = round(sum(auto_chgs) / len(auto_chgs), 2)
-                        SECTORS[0]["chg"] = avg_auto
-                        SECTORS[0]["rs"] = round(avg_auto - nifty_chg, 2)
-                        for c in CANDIDATES:
-                            if c["sector"] == "NIFTY AUTO":
-                                c["stockVsSector"] = round(c["chg"] - avg_auto, 2)
+        now = datetime.now(IST)
+        if now.weekday() < 5 and now.strftime("%H:%M") > "09:15":
+            cutoff = min(now, now.replace(hour=15, minute=30, second=0, microsecond=0))
+            def bf_progress(i, n, sym):
+                engine.feed_message = f"Live feed running · Backfilling {i}/{n} {sym}"
+            try:
+                bf = angel.backfill_today(client, cfg, day, members, cutoff, progress=bf_progress)
+                with engine.lock:
+                    for sym, cs in bf.items():
+                        ins = engine.nifty if sym == "NIFTY" else engine.instruments.get(sym)
+                        if ins is not None and cs:
+                            ins.load_candles(cs)
+                    engine.replay_closes()
+                engine.alert("info", f"Backfilled today's candles for {len(bf)} symbols (sector persistence rebuilt; no trades on old candles).")
+            except Exception as e:
+                engine.alert("warn", f"Backfill skipped ({e}) – building candles from live feed.")
+            engine.feed_message = "Live feed running"
 
-                    if energy_chgs:
-                        avg_energy = round(sum(energy_chgs) / len(energy_chgs), 2)
-                        SECTORS[1]["chg"] = avg_energy
-                        SECTORS[1]["rs"] = round(avg_energy - nifty_chg, 2)
-                        for c in CANDIDATES:
-                            if c["sector"] == "NIFTY ENERGY":
-                                c["stockVsSector"] = round(c["chg"] - avg_energy, 2)
+    def daily_loop():
+        saved_for = None
+        while True:
+            try:
+                now = datetime.now(IST)
+                day = now.date().isoformat()
+                if engine.day != day and (engine.day is None or now.strftime("%H:%M") >= "08:30"):
+                    prepare(day)
+                if now.strftime("%H:%M") >= "15:35" and saved_for != day and engine.day == day:
+                    save_candles(engine)
+                    saved_for = day
+            except Exception as e:
+                engine.feed_message = f"Error preparing the day: {e} – retrying in 60 s"
+                traceback.print_exc()
+                time.sleep(60)
+            time.sleep(5)
 
-                    MARKET_STATE["last_update"] = time.time()
-                else:
-                    if err: print("Quote fetch warning:", err)
-            else:
-                MARKET_STATE["source"] = "SIMULATED_TICK"
-                for c in CANDIDATES:
-                    delta = (random.random() - 0.49) * 0.4
-                    c["ltp"] = round(c["ltp"] + delta, 2)
-                    c["chg"] = round(((c["ltp"] - c["prev_close"]) / c["prev_close"]) * 100, 2)
-                MARKET_STATE["last_update"] = time.time()
-        except Exception as e:
-            print("Quote loop error:", e)
+    threading.Thread(target=daily_loop, daemon=True, name="daily").start()
+    threading.Thread(target=run_scheduler, args=(engine,), daemon=True, name="sched").start()
+    return engine
 
-        time.sleep(1.8)
 
-threading.Thread(target=background_quote_worker, daemon=True).start()
+def save_candles(engine: Engine):
+    """Spec section 13: store all live candles daily (data/candles/<day>.csv)."""
+    with engine.lock:
+        p = os.path.join(DATA, "candles", f"{engine.day}.csv")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("symbol,ts,o,h,l,c,v\n")
+            for ins in [engine.nifty] + list(engine.instruments.values()):
+                for c in ins.candles:
+                    f.write(f"{ins.symbol},{engine.day} {c.ts},{c.o},{c.h},{c.l},{c.c},{int(c.v)}\n")
+    print(f"Saved candles → {p}")
 
-# HTTP Request Handler
-class SmartAPIHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=DIRECTORY, **kwargs)
+
+# --------------------------------------------------------------------------- HTTP
+class Handler(http.server.BaseHTTPRequestHandler):
+    engine: Engine = None
+    server_version = "QuantLeafS5"
+
+    def log_message(self, fmt, *args):
+        try:
+            msg = fmt % args
+            if any(p in msg for p in ("/api/s5/state", "/api/s5/chart", "/api/s5/candidates", "/api/s5/market/live-quote")):
+                return
+            sys.stderr.write("%s - %s\n" % (self.address_string(), msg))
+        except Exception:
+            pass
+
+    def _send(self, code: int, body: bytes, ctype: str = "application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _json(self, obj, code=200):
+        self._send(code, json.dumps(obj, default=str).encode("utf-8"))
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-PrivateKey")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
+        self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
+
+    def do_HEAD(self):
+        return self.do_GET()
 
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
-
-        if path.startswith("/api/s5/"):
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-
-            if path == "/api/s5/market/live-quote":
-                unrealized = sum(p["unrealized_pnl"] for p in POSITIONS)
-                total_day_pnl = round(unrealized + REALIZED_PNL_TODAY, 2)
-                total_equity = round(CAPITAL_CONFIG["cash_capital"] + total_day_pnl, 2)
-                margin_blocked = sum(p["margin_blocked"] for p in POSITIONS)
-                free_cash = round(CAPITAL_CONFIG["cash_capital"] - margin_blocked + total_day_pnl, 2)
-
-                resp = {
-                    "source": MARKET_STATE["source"],
-                    "timestamp": MARKET_STATE["last_update"],
-                    "angel_connected": api_manager.is_connected,
-                    "user_name": api_manager.user_name,
-                    "capital_config": {
-                        "cash_capital": CAPITAL_CONFIG["cash_capital"],
-                        "margin_multiplier": CAPITAL_CONFIG["margin_multiplier"],
-                        "buying_power": CAPITAL_CONFIG["buying_power"],
-                        "risk_per_trade": CAPITAL_CONFIG["risk_rs_grade_a"],
-                        "day_stop_loss": CAPITAL_CONFIG["day_stop_loss"],
-                        "margin_blocked": margin_blocked,
-                        "free_cash": free_cash
-                    },
-                    "nifty": MARKET_STATE["nifty"],
-                    "india_vix": MARKET_STATE["india_vix"],
-                    "nifty_breadth": MARKET_STATE.get("nifty_breadth", {
-                        "advances": 34,
-                        "declines": 16,
-                        "unchanged": 0,
-                        "ratio": 2.13,
-                        "stance": "Bullish Breadth"
-                    }),
-                    "candidates": CANDIDATES,
-                    "positions": POSITIONS,
-                    "sectors": SECTORS,
-                    "day_pnl": total_day_pnl,
-                    "equity": total_equity
-                }
-                self.wfile.write(json.dumps(resp).encode("utf-8"))
-            elif path == "/api/s5/angel/status":
-                status_resp = {
-                    "connected": api_manager.is_connected,
-                    "user_name": api_manager.user_name,
-                    "last_error": api_manager.last_error,
-                    "last_login_time": api_manager.last_login_time,
-                    "last_quote_time": api_manager.last_quote_time,
-                    "api_key_configured": bool(CREDENTIALS.get("ANGEL_API_KEY")),
-                    "client_id": CREDENTIALS.get("ANGEL_CLIENT_ID", "")
-                }
-                self.wfile.write(json.dumps(status_resp).encode("utf-8"))
-            elif path == "/api/s5/sectors":
-                self.wfile.write(json.dumps(SECTORS).encode("utf-8"))
-            elif path == "/api/s5/candidates":
-                self.wfile.write(json.dumps(CANDIDATES).encode("utf-8"))
-            elif path == "/api/s5/state":
-                unrealized = sum(p["unrealized_pnl"] for p in POSITIONS)
-                total_day_pnl = round(unrealized + REALIZED_PNL_TODAY, 2)
-                resp = {
-                    "mode": "PAPER",
-                    "capital": 15000.0,
-                    "buying_power": 75000.0,
-                    "angel_connected": api_manager.is_connected,
-                    "source": MARKET_STATE["source"],
-                    "nifty": MARKET_STATE["nifty"],
-                    "india_vix": MARKET_STATE["india_vix"],
-                    "nifty_breadth": MARKET_STATE.get("nifty_breadth", {
-                        "advances": 34,
-                        "declines": 16,
-                        "unchanged": 0,
-                        "ratio": 2.13,
-                        "stance": "Bullish Breadth"
-                    }),
-                    "day_pnl": total_day_pnl,
-                    "equity": round(15000.0 + total_day_pnl, 2)
-                }
-                self.wfile.write(json.dumps(resp).encode("utf-8"))
-            else:
-                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
-            return
-
-        if path == "/":
-            self.path = "/index.html"
-        return super().do_GET()
+        u = urllib.parse.urlparse(self.path)
+        q = urllib.parse.parse_qs(u.query)
+        e = self.engine
+        try:
+            if u.path in ("/", "/index.html"):
+                with open(INDEX, "rb") as f:
+                    return self._send(200, f.read(), "text/html; charset=utf-8")
+            if u.path in ("/api/s5/state", "/api/s5/market/live-quote"):
+                return self._json(e.snapshot())
+            if u.path == "/api/s5/sectors":
+                return self._json(e.snapshot()["sectors"])
+            if u.path == "/api/s5/candidates":
+                return self._json(e.snapshot()["candidates"])
+            if u.path == "/api/s5/chart":
+                return self._json(e.chart((q.get("symbol") or [""])[0]))
+            if u.path == "/api/s5/signals":
+                d = (q.get("date") or [e.day or ""])[0]
+                if not (len(d) == 10 and d[4] == "-" and d[7] == "-"):
+                    return self._json({"error": "date=YYYY-MM-DD"}, 400)
+                return self._json(e.store.read_lines(os.path.join("signals", f"{d}.jsonl")))
+            if u.path == "/api/s5/trades":
+                frm = (q.get("from") or ["0000-00-00"])[0]
+                to = (q.get("to") or ["9999-99-99"])[0]
+                return self._json([t for t in e.store.read_lines("trades.jsonl") if frm <= t.get("date", "") <= to])
+        except Exception as ex:
+            traceback.print_exc()
+            return self._json({"error": str(ex)}, 500)
+        self._send(404, b'{"error":"not found"}')
 
     def do_POST(self):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
-
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+        u = urllib.parse.urlparse(self.path)
+        n = int(self.headers.get("Content-Length") or 0)
         try:
-            data = json.loads(body)
+            data = json.loads(self.rfile.read(min(n, 10000)) or b"{}")
         except Exception:
             data = {}
+        # owner-only actions: must come from this computer, same origin, with a written reason
+        if self.client_address[0] not in ("127.0.0.1", "::1"):
+            return self._json({"error": "owner actions only from this computer"}, 403)
+        origin = self.headers.get("Origin")
+        if origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host"):
+            return self._json({"error": "cross-site request refused"}, 403)
+        reason = str(data.get("reason", "")).strip()
+        if u.path in ("/api/s5/halt-clear", "/api/s5/halt"):
+            if len(reason) < 5:
+                return self._json({"error": "a written reason (≥ 5 characters) is required"}, 400)
+            res = self.engine.halt_clear(reason) if u.path.endswith("clear") else self.engine.halt(reason)
+            return self._json(res)
+        self._send(404, b'{"error":"not found"}')
 
-        if path == "/api/s5/angel/connect":
-            api_key = data.get("api_key")
-            client_id = data.get("client_id")
-            pin = data.get("pin")
-            totp_secret = data.get("totp_secret")
-            save_env = data.get("save_to_env", True)
 
-            ok, msg = api_manager.connect(api_key, client_id, pin, totp_secret)
-            if ok and save_env:
-                try:
-                    with open(ENV_PATH, "w", encoding="utf-8") as f:
-                        f.write(f"ANGEL_API_KEY={api_key}\n")
-                        f.write(f"ANGEL_CLIENT_ID={client_id}\n")
-                        f.write(f"ANGEL_PIN={pin}\n")
-                        f.write(f"ANGEL_TOTP_SECRET={totp_secret}\n")
-                except Exception as e:
-                    print("Could not save .env:", e)
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                "status": ok,
-                "message": msg,
-                "connected": api_manager.is_connected,
-                "user_name": api_manager.user_name
-            }).encode("utf-8"))
-            return
-
-        elif path == "/api/s5/halt-clear":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "cleared", "timestamp": time.time()}).encode("utf-8"))
-            return
-
-        self.send_response(404)
-        self.end_headers()
-
-class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-def run():
-    server = ThreadedHTTPServer(("0.0.0.0", PORT), SmartAPIHandler)
-    print(f"🚀 QuantLeaf S5 Server running at http://0.0.0.0:{PORT}")
-    print(f"💰 Account: Cash Capital ₹15,000 | 5x MIS Intraday Buying Power ₹75,000")
-    print(f"📡 Angel One SmartAPI Feed configured for Client: {CREDENTIALS.get('ANGEL_CLIENT_ID')}")
+
+def main():
+    ap = argparse.ArgumentParser(description="QuantLeaf Strategy 5 server")
+    ap.add_argument("--demo", action="store_true", help="simulated market instead of Angel One")
+    ap.add_argument("--demo-speed", type=float, default=8.0, help="demo clock speed (default 8× real time)")
+    ap.add_argument("--demo-start", default="09:14:50", help="demo start time HH:MM[:SS]")
+    ap.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1 (this computer only)")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8081)))
+    args = ap.parse_args()
+
+    cfg = load_config()
+    env = angel.load_env(os.path.join(ROOT, ".env"))
+    if args.demo:
+        engine = run_demo(cfg, args)
+        print("▶ DEMO mode – simulated prices (not real market data)")
+    elif not angel.SMARTAPI_AVAILABLE:
+        print("✗ SmartApi not installed. Run:  pip install -r requirements.txt   (or start with --demo)")
+        sys.exit(1)
+    elif not angel.creds_ok(env):
+        print("✗ Angel One credentials missing in .env (copy .env.example → .env).  Or start with --demo")
+        sys.exit(1)
+    else:
+        engine = run_live(cfg, env)
+        print("▶ LIVE Angel One data · PAPER trading (no real orders)")
+
+    Handler.engine = engine
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"⚠ Listening on {args.host}: anyone on your network can open the dashboard.")
+    srv = ThreadedServer((args.host, args.port), Handler)
+    print(f"🚀 QuantLeaf S5 dashboard → http://127.0.0.1:{args.port}")
+    print(f"   Profile '{cfg['profile_name']}' · capital ₹{cfg['P']['capital']:,} · risk/trade ₹{cfg['P']['capital']*cfg['P']['risk_pct_A']:,.0f} · gross cap ₹{cfg['P']['capital']*cfg['P']['gross_cap']:,.0f}")
     try:
-        server.serve_forever()
+        srv.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down server...")
-        server.shutdown()
+        print("\nStopping…")
+        srv.shutdown()
+
 
 if __name__ == "__main__":
-    run()
+    main()

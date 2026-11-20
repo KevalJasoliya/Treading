@@ -97,6 +97,8 @@ class Engine:
         self.alerts: List[dict] = []
         self.transport = "—"
         self.feed_message = "Starting…"
+        self.live_orders: List[dict] = []
+        self.order_feed_status: dict = {"status": "CONNECTING", "transport": "SmartWebSocketOrderUpdate", "message": "Starting…"}
         self.batch_info: dict = {"status": "pending"}
         self.reset_day(None)
         st = self.store.load_state()
@@ -496,7 +498,41 @@ class Engine:
         self.skipped.append(row)
         self.store.append(os.path.join("signals", f"{self.day}.jsonl"), {"state": "SKIPPED", "date": self.day, **row})
 
-    # ------------------------------------------------------------------ section 10 (paper)
+    # ------------------------------------------------------------------ section 10 (paper & live orders)
+    def on_order_update(self, raw_payload: dict, is_snapshot: bool = False):
+        with self.lock:
+            od = raw_payload.get("orderData") or raw_payload.get("data") or raw_payload
+            if not isinstance(od, dict):
+                return
+            order_id = str(od.get("orderid") or od.get("order_id") or "").strip()
+            if not order_id:
+                return
+            sym = str(od.get("tradingsymbol") or od.get("symbol") or "").replace("-EQ", "").strip()
+            status = str(od.get("orderstatus") or od.get("status") or "PENDING").upper().strip()
+            tx_type = str(od.get("transactiontype") or "").upper().strip()
+            price = float(od.get("price") or 0.0)
+            avg_price = float(od.get("averageprice") or od.get("fillprice") or price or 0.0)
+            qty = int(od.get("quantity") or od.get("lotsize") or od.get("filledshares") or 0)
+            filled = int(od.get("filledshares") or (qty if status in ("COMPLETE", "FILLED") else 0))
+            unfilled = int(od.get("unfilledshares") or (0 if status in ("COMPLETE", "FILLED") else max(0, qty - filled)))
+            update_time = str(od.get("updatetime") or od.get("exchtime") or od.get("exchorderupdatetime") or self.hm())
+            msg_text = str(od.get("text") or od.get("rejectionreason") or "")
+            order_entry = {
+                "order_id": order_id, "symbol": sym, "status": status, "transaction_type": tx_type,
+                "price": round(avg_price if avg_price > 0 else price, 2), "quantity": qty,
+                "filled": filled, "unfilled": unfilled, "update_time": update_time, "text": msg_text,
+                "timestamp": datetime.now(IST).strftime("%H:%M:%S")
+            }
+            existing_idx = next((i for i, o in enumerate(self.live_orders) if o["order_id"] == order_id), None)
+            if existing_idx is not None:
+                self.live_orders[existing_idx] = order_entry
+            else:
+                self.live_orders.insert(0, order_entry)
+            if len(self.live_orders) > 100:
+                self.live_orders = self.live_orders[:100]
+            if not is_snapshot:
+                self.alert("info", f"Order update: {sym} {tx_type} {status} ({filled}/{qty} @ ₹{avg_price or price:.2f})")
+
     def _place_entry(self, ev: dict, qty: int, close_t: str):
         sym = ev["symbol"]
         limit = ev["ltp_close"] * (1 + self.C["entry_limit_pad"])
@@ -509,6 +545,12 @@ class Engine:
         self.store.append(os.path.join("signals", f"{self.day}.jsonl"), {
             "state": "TRIGGERED", "date": self.day, "time": close_t, "symbol": sym, "qty": qty, "planned": ev["planned"],
             "first_fail_check": None, "profile": self.cfg["profile_name"], "mode": self.mode})
+        self.live_orders.insert(0, {
+            "order_id": f"ORD-{int(time.time()*1000)}", "symbol": sym, "status": "OPEN", "transaction_type": "BUY",
+            "price": round(limit, 2), "quantity": qty, "filled": 0, "unfilled": qty,
+            "update_time": close_t, "text": f"Paper limit buy triggered (candle {close_t})",
+            "timestamp": datetime.now(IST).strftime("%H:%M:%S")
+        })
         self.alert("info", f"Candidate triggered: {sym} – paper limit buy {qty} @ ≤ ₹{limit:.2f}")
 
     def _try_fill(self, sym: str, ltp: float):
@@ -517,6 +559,15 @@ class Engine:
             return
         fill = min(ltp * (1 + self.C["slip_model"]), o["limit"])
         del self.pending[sym]
+        for ord in self.live_orders:
+            if ord["symbol"] == sym and ord["status"] == "OPEN":
+                ord["status"] = "COMPLETE"
+                ord["filled"] = ord["quantity"]
+                ord["unfilled"] = 0
+                ord["price"] = round(fill, 2)
+                ord["update_time"] = self.hm()
+                ord["text"] = f"Filled @ ₹{fill:.2f}"
+                break
         st = self.stats[sym]
         R, stop, t1, t2 = plan_levels(fill, o["atr"], self.C["stop_atr"], self.C["tick"])
         variant = self.P.get("exit_variant", "E2")
@@ -541,6 +592,12 @@ class Engine:
             if now >= self.pending[sym]["deadline"]:
                 del self.pending[sym]
                 self._skip(sym, now.strftime("%H:%M:%S"), "no_fill within 10 s (never chase)")
+                for ord in self.live_orders:
+                    if ord["symbol"] == sym and ord["status"] == "OPEN":
+                        ord["status"] = "CANCELLED"
+                        ord["text"] = "Expired after 10 s without fill"
+                        ord["update_time"] = self.hm()
+                        break
 
     def _apply_exits(self, pos: Position, exits: List[dict]):
         if not exits:
@@ -551,6 +608,12 @@ class Engine:
                 continue
             pos.legs.append({**e, "qty": q})
             pos.qty_open -= q
+            self.live_orders.insert(0, {
+                "order_id": f"EXIT-{int(time.time()*1000)}", "symbol": pos.symbol, "status": "COMPLETE",
+                "transaction_type": "SELL", "price": round(e["price"], 2), "quantity": q, "filled": q, "unfilled": 0,
+                "update_time": self.hm(), "text": f"Exit: {e['reason']}",
+                "timestamp": datetime.now(IST).strftime("%H:%M:%S")
+            })
             if e["reason"].startswith("Target T1") and pos.variant == "E3":
                 pos.stop = pos.fill          # E3: stop moves to entry for the remainder
             if e["reason"].startswith("Target T1"):
@@ -688,6 +751,7 @@ class Engine:
         return {"status": st, "age_s": None if age in (None, float("inf")) else round(age, 1), "transport": self.transport,
                 "ticks": self.ticks, "message": self.feed_message, "warn_s": self.C["feed_stale_warn_s"],
                 "flatten_s": self.C["feed_stale_flatten_s"],
+                "order_feed": self.order_feed_status,
                 "last_tick": datetime.fromtimestamp(self.last_tick_wall, IST).strftime("%H:%M:%S") if self.last_tick_wall else None}
 
     def snapshot(self) -> dict:
@@ -765,6 +829,8 @@ class Engine:
                 "candidates": cands,
                 "positions": positions,
                 "trades": self.closed_today,
+                "live_orders": self.live_orders[:50],
+                "order_feed": self.order_feed_status,
                 "skipped": self.skipped[-50:],
                 "meters": {
                     "capital": P["capital"], "risk_A": r2(P["capital"] * P["risk_pct_A"]), "risk_B": r2(P["capital"] * P["risk_pct_B"]),

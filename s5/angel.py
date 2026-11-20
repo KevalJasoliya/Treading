@@ -59,12 +59,13 @@ def _silence_smartapi_logging():
     every error. Turn that off; our own messages below are redacted."""
     try:
         import logzero  # SmartApi uses logzero
-        logzero.logfile(None)
+        logzero.logfile = lambda *a, **kw: None
         logzero.loglevel(logging.CRITICAL)
         logzero.logger.addFilter(_RedactFilter())
     except Exception:
         pass
-    for name in ("SmartApi", "SmartApi.smartConnect", "smartConnect", "SmartApi.smartWebSocketV2", "smartWebSocketV2"):
+    for name in ("SmartApi", "SmartApi.smartConnect", "smartConnect", "SmartApi.smartWebSocketV2", "smartWebSocketV2",
+                 "SmartApi.smartWebSocketOrderUpdate", "smartWebSocketOrderUpdate"):
         lg = logging.getLogger(name)
         lg.setLevel(logging.CRITICAL)
         lg.addFilter(_RedactFilter())
@@ -83,11 +84,16 @@ try:
         from SmartApi.smartWebSocketV2 import SmartWebSocketV2
     except Exception:  # pragma: no cover
         SmartWebSocketV2 = None
+    try:
+        from SmartApi.smartWebSocketOrderUpdate import SmartWebSocketOrderUpdate
+    except Exception:  # pragma: no cover
+        SmartWebSocketOrderUpdate = None
     SMARTAPI_AVAILABLE = True
     _silence_smartapi_logging()
 except ImportError:
     SmartConnect = None
     SmartWebSocketV2 = None
+    SmartWebSocketOrderUpdate = None
     pyotp = None
     SMARTAPI_AVAILABLE = False
 
@@ -459,6 +465,120 @@ def backfill_today(client: AngelClient, cfg: dict, day: str, members: List[dict]
     return out
 
 
+# --------------------------------------------------------------------------- order updates feed
+class OrderFeed:
+    """Live order status stream via Angel One SmartWebSocketOrderUpdate.
+    Streams order placement, modifications, execution (fills), rejections, and cancellations in real-time.
+    """
+    def __init__(self, client: AngelClient, engine):
+        self.client = client
+        self.engine = engine
+        self.ws = None
+        self.ws_up = False
+        self.stop_flag = False
+        self.ws_thread = None
+
+    def _on_open(self, wsapp):
+        self.ws_up = True
+        self.engine.order_feed_status = {"status": "LIVE", "transport": "SmartWebSocketOrderUpdate", "message": "Connected"}
+        log("Order WebSocket open – streaming live order status updates")
+
+    def _on_data(self, wsapp, message, data_type, continue_flag):
+        self._on_message(wsapp, message)
+
+    def _on_message(self, wsapp, message):
+        try:
+            if isinstance(message, (bytes, bytearray)):
+                message = message.decode("utf-8", errors="ignore")
+            if isinstance(message, str):
+                try:
+                    data = json.loads(message)
+                except Exception:
+                    data = {"raw": message}
+            elif isinstance(message, dict):
+                data = message
+            else:
+                return
+
+            # Check if this is a heartbeat / pong or system control
+            if data == "ping" or data == "pong":
+                return
+            if isinstance(data, dict):
+                if data.get("status-code") == "200" and not data.get("orderData"):
+                    return
+            self.engine.on_order_update(data)
+        except Exception as e:
+            log(f"order update parse error: {e}")
+
+    def _on_error(self, wsapp, err=None, *a):
+        log(f"Order WebSocket error: {err}")
+        self.ws_up = False
+        self.engine.order_feed_status = {"status": "ERROR", "transport": "SmartWebSocketOrderUpdate", "message": str(err)}
+
+    def _on_close(self, wsapp, *a):
+        if self.ws_up:
+            log("Order WebSocket closed")
+        self.ws_up = False
+        self.engine.order_feed_status = {"status": "DISCONNECTED", "transport": "SmartWebSocketOrderUpdate", "message": "Closed"}
+
+    def _loop(self):
+        delay = 2
+        while not self.stop_flag:
+            if not SMARTAPI_AVAILABLE or SmartWebSocketOrderUpdate is None:
+                self.engine.order_feed_status = {"status": "UNAVAILABLE", "transport": "None", "message": "Library not found"}
+                return
+            try:
+                self.ws = SmartWebSocketOrderUpdate(
+                    self.client.jwt,
+                    self.client.env["ANGEL_API_KEY"],
+                    self.client.env["ANGEL_CLIENT_ID"],
+                    self.client.feed_token
+                )
+                self.ws.on_open = self._on_open
+                self.ws.on_data = self._on_data
+                self.ws.on_message = self._on_message
+                self.ws.on_error = self._on_error
+                self.ws.on_close = self._on_close
+                self.ws.connect()
+            except Exception as e:
+                log(f"Order WebSocket connect failed: {e}")
+            self.ws_up = False
+            if self.stop_flag:
+                break
+            time.sleep(delay)
+            delay = min(30, delay * 2)
+
+    def fetch_initial_orders(self):
+        """Initial snapshot of today's orders from broker orderBook REST API."""
+        try:
+            if self.client and self.client.smart:
+                res = self.client.smart.orderBook()
+                if res and res.get("status") and res.get("data"):
+                    for ord_raw in res.get("data", []):
+                        self.engine.on_order_update({"orderData": ord_raw}, is_snapshot=True)
+        except Exception as e:
+            log(f"Failed to fetch initial orderBook: {e}")
+
+    def _poll_orders_loop(self):
+        while not self.stop_flag:
+            time.sleep(10)
+            self.fetch_initial_orders()
+
+    def start(self):
+        self.fetch_initial_orders()
+        self.ws_thread = threading.Thread(target=self._loop, daemon=True, name="order_ws")
+        self.ws_thread.start()
+        threading.Thread(target=self._poll_orders_loop, daemon=True, name="order_poll").start()
+
+    def stop(self):
+        self.stop_flag = True
+        try:
+            if self.ws:
+                self.ws.close_connection()
+        except Exception:
+            pass
+
+
 # --------------------------------------------------------------------------- live feed
 class LiveFeed:
     """WebSocket QUOTE feed with automatic reconnect; REST polling only while the socket is down."""
@@ -474,6 +594,7 @@ class LiveFeed:
         self.scale: Optional[float] = None
         self._last_rest: Dict[str, tuple] = {}
         self.ws_thread = None
+        self.order_feed = OrderFeed(client, engine)
 
     # ----- price scale (spec: "prices arrive as integers in paise – verify against a known quote")
     def _price(self, raw, token) -> Optional[float]:
@@ -604,9 +725,14 @@ class LiveFeed:
         self.ws_thread = threading.Thread(target=self._ws_loop, daemon=True, name="ws")
         self.ws_thread.start()
         threading.Thread(target=self._rest_loop, daemon=True, name="rest").start()
+        self.order_feed.start()
 
     def stop(self):
         self.stop_flag = True
+        try:
+            self.order_feed.stop()
+        except Exception:
+            pass
         try:
             if self.ws:
                 self.ws.close_connection()
